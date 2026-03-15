@@ -3,6 +3,8 @@ package com.spotifyhub.playback.model
 data class PlaybackSnapshot(
     val isPlaying: Boolean,
     val progressMs: Long,
+    val durationMs: Long,
+    val fetchedAtEpochMs: Long,
     val item: PlaybackItem?,
     val device: PlaybackDevice?,
 )
@@ -22,4 +24,3 @@ data class PlaybackDevice(
     val type: String,
     val volumePercent: Int?,
 )
-

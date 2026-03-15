@@ -4,6 +4,7 @@ import com.spotifyhub.playback.model.PlaybackDevice
 import com.spotifyhub.playback.model.PlaybackItem
 import com.spotifyhub.playback.model.PlaybackSnapshot
 import com.spotifyhub.spotify.dto.player.PlaybackResponseDto
+import java.time.Instant
 
 object PlaybackMapper {
     fun map(dto: PlaybackResponseDto?): PlaybackSnapshot? {
@@ -14,6 +15,8 @@ object PlaybackMapper {
         return PlaybackSnapshot(
             isPlaying = dto.isPlaying == true,
             progressMs = dto.progressMs ?: 0L,
+            durationMs = dto.item?.durationMs ?: 0L,
+            fetchedAtEpochMs = Instant.now().toEpochMilli(),
             item = dto.item?.let {
                 PlaybackItem(
                     id = it.id.orEmpty(),
@@ -35,4 +38,3 @@ object PlaybackMapper {
         )
     }
 }
-

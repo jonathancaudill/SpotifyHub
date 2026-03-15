@@ -15,6 +15,7 @@ data class PlaybackResponseDto(
 data class TrackDto(
     val id: String?,
     val name: String?,
+    @param:Json(name = "duration_ms") val durationMs: Long?,
     val uri: String?,
     val album: AlbumDto?,
     val artists: List<ArtistDto> = emptyList(),

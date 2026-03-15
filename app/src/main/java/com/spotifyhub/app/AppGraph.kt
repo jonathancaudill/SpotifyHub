@@ -6,6 +6,7 @@ import com.spotifyhub.auth.SpotifyAuthRepository
 import com.spotifyhub.auth.TokenStore
 import com.spotifyhub.playback.PlaybackRepository
 import com.spotifyhub.spotify.api.SpotifyAccountsApi
+import com.spotifyhub.spotify.api.SpotifyLibraryApi
 import com.spotifyhub.spotify.api.SpotifyNetworkModule
 import com.spotifyhub.spotify.api.SpotifyPlayerApi
 import com.spotifyhub.system.input.InputRouter
@@ -48,11 +49,19 @@ class AppGraph(private val appContext: Context) {
         )
     }
 
+    val libraryApi: SpotifyLibraryApi by lazy {
+        SpotifyNetworkModule.createLibraryApi(
+            moshi = moshi,
+            authRepository = authRepository,
+        )
+    }
+
     val playbackRepository: PlaybackRepository by lazy {
         PlaybackRepository(
             appScope = applicationScope,
             authRepository = authRepository,
             playerApi = playerApi,
+            libraryApi = libraryApi,
         )
     }
 
@@ -64,4 +73,3 @@ class AppGraph(private val appContext: Context) {
         InputRouter()
     }
 }
-

@@ -33,5 +33,22 @@ object SpotifyNetworkModule {
             .build()
             .create(SpotifyPlayerApi::class.java)
     }
-}
 
+    fun createLibraryApi(
+        moshi: Moshi,
+        authRepository: SpotifyAuthRepository,
+    ): SpotifyLibraryApi {
+        return Retrofit.Builder()
+            .baseUrl("https://api.spotify.com/")
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .client(
+                OkHttpClient.Builder()
+                    .addInterceptor(AuthHeaderInterceptor(authRepository))
+                    .addInterceptor(RetryAfterInterceptor())
+                    .authenticator(TokenRefreshAuthenticator(authRepository))
+                    .build(),
+            )
+            .build()
+            .create(SpotifyLibraryApi::class.java)
+    }
+}

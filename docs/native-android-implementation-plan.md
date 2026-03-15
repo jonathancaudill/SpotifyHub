@@ -4,13 +4,15 @@ Validated against the Spotify and Android docs on 2026-03-15.
 
 ## Implementation progress
 
-Status updated on 2026-03-15 during active repository bootstrap.
+Status updated on 2026-03-15 after auth validation, landscape UI correction, the first AndroidLiquidGlass refactor, and real library save-toggle implementation.
 
 ### Completed in repo
 
 - Android project scaffolded with `:app`, version catalog, manifest, resources, and Gradle wrapper
 - Local toolchain installed on this machine for development: JDK, Gradle, Android command-line tools, platform-tools, Android 36 platform, and Build Tools 36.0.0
 - `./gradlew assembleDebug` passes locally
+- BlueStacks auth smoke test succeeded with the current PKCE + fixed loopback callback flow
+- BlueStacks playback polling works end-to-end against an active Spotify Connect session
 - Manual DI app shell implemented with `SpotifyHubApp`, `AppGraph`, `MainActivity`, and `MainViewModelFactory`
 - Root Compose flow implemented with `RootViewModel`, `AuthViewModel`, `PlayerViewModel`, `AuthScreen`, and `NowPlayingScreen`
 - Auth foundation implemented with:
@@ -21,13 +23,36 @@ Status updated on 2026-03-15 during active repository bootstrap.
   - encrypted token persistence
 - Spotify Web API foundation implemented with Retrofit, OkHttp auth header injection, `401` token refresh, and `429` retry handling
 - Initial playback polling implemented against `GET /v1/me/player`
+- Previous/play-pause/next transport commands implemented against Spotify player endpoints
+- Current-track library state implemented against Spotify's February 2026 library endpoints:
+  - saved-state fetch through `GET /v1/me/library/contains`
+  - save/remove toggle through `PUT /v1/me/library?uris=...` and `DELETE /v1/me/library?uris=...`
+  - current-item save state exposed through `PlaybackRepository` and `PlayerViewModel`
 - Basic kiosk shell implemented with immersive mode entry, HOME/LAUNCHER manifest wiring, boot receiver, and device-admin receiver stub
+- Horizontal-first now-playing UI implemented with:
+  - landscape orientation baseline
+  - glass-heavy artwork-led layout inspired by CarPlay and Nocturne
+  - AndroidLiquidGlass backdrop surfaces for the rail and main panel
+  - local progress interpolation between poll intervals
+  - Compose preview for fast UI iteration
+- Visual refinement pass completed on the now-playing screen:
+  - denser metadata hierarchy and lower control deck
+  - stronger empty-artwork placeholder treatment for Studio previews
+  - atmospheric glow layers and more intentional panel spacing
+- AndroidLiquidGlass usage corrected on the now-playing screen:
+  - one structural liquid sidebar surface instead of broad frosted panels
+  - transport and utility controls now built as explicit liquid buttons using `drawBackdrop`, `lens`, `highlight`, and shadow
+  - main content area returned to an open artwork-led composition instead of nested glass cards
+- Save control on the now-playing screen now matches the current Spotify pattern more closely:
+  - heart placeholder removed
+  - utility control uses a `+` icon that animates into a checkmark
+  - button is enabled only when a current playback item exists and no command is already in flight
 
 ### Intentionally not finished yet
 
 - Embedded WebView auth fallback is not implemented yet; the current code uses Custom Tabs first and generic browser intent second
-- Playback write endpoints are not wired yet: play/pause, next/previous, shuffle, repeat, transfer, volume, and like/save remain pending
-- Adaptive artwork theming, glass controls, browse overlays, and device switcher UI are still pending
+- Shuffle, repeat, transfer, volume, and device switching remain pending
+- Adaptive artwork palette extraction, browse overlays, and device switcher UI are still pending
 - HID/encoder routing is only a stub
 - Device-owner lock-task provisioning code is still pending beyond manifest and receiver scaffolding
 
@@ -38,10 +63,42 @@ Status updated on 2026-03-15 during active repository bootstrap.
   - avoid `kapt` for now
 - The current build therefore uses Moshi reflection plus `KotlinJsonAdapterFactory` instead of Moshi codegen
 - `EncryptedSharedPreferences` currently builds with deprecation warnings. That matches the original plan, but it should be revisited once the first auth spike is proven on hardware
+- The current UI now targets landscape directly because BlueStacks validation proved that the original rotated-portrait assumption was wrong for the intended appliance layout
+
+### Practical handoff notes for future agents
+
+- The user already proved the auth path works in BlueStacks and explicitly reported that the API/auth structure is working.
+- The user rejected the original rotated portrait assumption. Treat this app as landscape-first unless real Echo Show testing proves otherwise.
+- The current redirect URI in both code and plan is the fixed loopback callback `http://127.0.0.1:43821/callback`. Do not silently switch back to a dynamic port without verifying the Spotify dashboard accepts that registration flow again.
+- The user explicitly pushed back on “CSS glass” styling. The current direction is:
+  - one structural liquid sidebar surface
+  - actual AndroidLiquidGlass-backed controls for transport and utility actions
+  - open main content area over the artwork background
+- The user wants the visual language to stay between CarPlay and Nocturne, but with restrained use of liquid glass rather than blanket frosted panels.
+- The save button now works end-to-end and the user explicitly confirmed it. Do not regress it back to a heart icon; the current direction is Spotify-style `+` to checkmark.
+- Important Spotify API gotcha already discovered in this repo:
+  - `GET /v1/me/library/contains` uses the `uris` query parameter
+  - the matching save/remove endpoints also expect `uris` as a query parameter
+  - an earlier incorrect body-based implementation compiled and read state correctly but failed to toggle library membership
+- The next high-value visual/UX tasks are adaptive artwork colors and cleanup of the remaining placeholder/disabled actions, not more structural panel layering.
+- Local toolchain context on this machine:
+  - `JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home`
+  - `ANDROID_SDK_ROOT=$HOME/Library/Android/sdk`
+  - `local.properties` can point `sdk.dir` at `/Users/jonathancaudill/Library/Android/sdk`
+- Repo hygiene context:
+  - `.gitignore` already excludes build output, Kotlin caches, and `gradle/gradle-daemon-jvm.properties`
+  - the repo had local generated directories cleaned earlier and did not require git history rewrite
+
+### Recommended next implementation steps
+
+1. Implement adaptive artwork palette extraction and feed it into the now-playing background and liquid-button tinting.
+2. Replace the remaining placeholder disabled utility actions with real volume, shuffle/repeat, and device-switcher behavior.
+3. Decide whether the embedded WebView fallback is acceptable, or explicitly document that the project requires Custom Tabs / browser auth only.
+4. Test the current landscape UI and liquid effects on the actual Echo Show hardware before increasing blur, refraction, or animation complexity.
 
 ## 0. Working assumptions
 
-- The device is mounted in portrait, so the app should render into a rotated 480 x 960 viewport even though the panel is natively 960 x 480.
+- The app currently targets a landscape-first 960 x 480 layout. This replaced the earlier rotated-portrait assumption after BlueStacks validation and user feedback.
 - This is a single-user appliance. Design for one signed-in Spotify account and one always-running app.
 - The app controls Spotify playback on other devices only. Do not integrate Spotify App Remote or the Spotify Android SDK.
 - The app should target `minSdk = 30` because the hardware is fixed to Android 11.
@@ -266,7 +323,7 @@ Build flags:
 - `minSdk = 30`
 - `targetSdk = 35` for the first release
 - `compileSdk = 36`
-- `screenOrientation = portrait`
+- `screenOrientation = landscape`
 - `minifyEnabled = true`
 - `shrinkResources = true`
 - `largeHeap = false`
@@ -656,12 +713,13 @@ This app is appliance-like, not a general multi-screen mobile app.
 
 ### Default layout
 
-Portrait layout proportions:
+Landscape layout proportions:
 
-- top 48%: artwork hero
-- next 18%: title, artist, album, progress
-- next 18%: primary transport
-- bottom 16%: secondary controls and browse entry points
+- left rail: narrow vertical launcher/status strip
+- main stage left: artwork hero
+- main stage right: metadata block
+- lower band: progress plus primary liquid controls
+- outer edge actions: save/devices/browse/volume as secondary controls
 
 ### Screen breakdown
 
@@ -803,15 +861,16 @@ Instead:
 
 Use `AndroidLiquidGlass` sparingly:
 
-- secondary action tray background
-- device pills
-- overlay headers
+- sidebar surface
+- transport controls
+- utility action buttons
+- selected secondary pills or overlay headers when they need emphasis
 
 Do not use it for:
 
 - full-screen blur
 - the entire background
-- every card and row
+- every card, row, chip, and content container
 
 On this hardware, treat liquid glass as an accent effect, not the base rendering model.
 
@@ -1088,7 +1147,7 @@ Exit criteria:
 
 - auth works on the real device today
 - no private Spotify auth surfaces are required
-- `localhost` and fixed-port assumptions are gone
+- `localhost` is gone and the fixed loopback port is proven in the current implementation
 - the fallback path is decided: either WebView is good enough, or the project carries an HTTPS auth broker as a v1 prerequisite
 
 ### Phase 1: bootstrap
