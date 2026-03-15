@@ -2,6 +2,7 @@ package com.spotifyhub.auth
 
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import kotlinx.coroutines.Dispatchers
@@ -13,7 +14,7 @@ data class LoopbackAuthResult(val rawPath: String)
 class LoopbackAuthServer private constructor(
     private val serverSocket: ServerSocket,
 ) {
-    val redirectUri: String = "http://127.0.0.1:${serverSocket.localPort}/callback"
+    val redirectUri: String = "http://127.0.0.1:${CALLBACK_PORT}/callback"
 
     suspend fun awaitCallback(timeoutMs: Long = 90_000L): LoopbackAuthResult {
         return withTimeout(timeoutMs) {
@@ -46,7 +47,11 @@ class LoopbackAuthServer private constructor(
     }
 
     companion object {
-        fun bind(): LoopbackAuthServer = LoopbackAuthServer(ServerSocket(0))
+        const val CALLBACK_PORT: Int = 43821
+
+        fun bind(): LoopbackAuthServer {
+            val socket = ServerSocket(CALLBACK_PORT, 0, InetAddress.getByName("127.0.0.1"))
+            return LoopbackAuthServer(socket)
+        }
     }
 }
-

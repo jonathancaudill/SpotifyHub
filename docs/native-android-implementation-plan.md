@@ -15,7 +15,7 @@ Status updated on 2026-03-15 during active repository bootstrap.
 - Root Compose flow implemented with `RootViewModel`, `AuthViewModel`, `PlayerViewModel`, `AuthScreen`, and `NowPlayingScreen`
 - Auth foundation implemented with:
   - PKCE generator
-  - dynamic loopback callback server on `127.0.0.1`
+  - fixed loopback callback server on `127.0.0.1:43821`
   - browser launch path through Custom Tabs or generic browser intent
   - token exchange and refresh repository
   - encrypted token persistence
@@ -350,9 +350,9 @@ Do not use a custom URI scheme for the primary implementation. Spotify's current
 
 Register this redirect URI in the Spotify developer dashboard:
 
-- `http://127.0.0.1/callback`
+- `http://127.0.0.1:43821/callback`
 
-That exact portless registration is important. Spotify's current redirect URI rules explicitly allow a loopback IP literal to be registered without a port, then a dynamically assigned port can be added in the live authorization request.
+Use a fixed loopback port here because the Spotify developer dashboard currently rejects the portless loopback form in practice. Match the app and dashboard exactly.
 
 Do not register:
 
@@ -364,11 +364,11 @@ Do not register:
 #### Flow
 
 1. `AuthViewModel.startLogin()` generates a `code_verifier` and `code_challenge`.
-2. `LoopbackAuthServer.bind()` opens a server socket on `127.0.0.1` with port `0`, captures the assigned ephemeral port, and returns the live redirect URI `http://127.0.0.1:{port}/callback`.
+2. `LoopbackAuthServer.bind()` opens a server socket on `127.0.0.1:43821` and returns the fixed redirect URI `http://127.0.0.1:43821/callback`.
 3. Launch the authorize URL in this order:
    - `CustomTabsIntent` if a compatible browser exists.
    - Embedded WebView inside `AuthScreen` as fallback.
-4. Spotify redirects to `http://127.0.0.1:{port}/callback?code=...`.
+4. Spotify redirects to `http://127.0.0.1:43821/callback?code=...`.
 5. `LoopbackAuthServer` captures the code and serves a tiny HTML success page.
 6. `SpotifyAuthRepository.exchangeCodeForTokens()` calls `/api/token`.
 7. Store the refresh token in `EncryptedSharedPreferences`.
@@ -422,7 +422,7 @@ Auth is a release gate for this appliance. Do not consider the project unblocked
 
 - fresh install -> sign in via `CustomTabsIntent` works
 - fresh install -> sign in via embedded `WebView` works, or is explicitly rejected and replaced by the HTTPS broker fallback plan
-- the loopback server binds a dynamic port and receives the callback correctly
+- the loopback server binds `127.0.0.1:43821` and receives the callback correctly
 - app restart reuses the refresh token and does not ask for consent again
 - `401` and `invalid_grant` paths return cleanly to `AuthScreen`
 - no code path depends on Nocturne auth code, librespot internals, `localhost`, or a custom URI scheme
@@ -1025,7 +1025,7 @@ Files:
 - `local.properties` or `secrets.properties` for `SPOTIFY_CLIENT_ID`
 
 Keep the client secret out of the app completely. PKCE does not need one.
-Register the Spotify redirect URI as `http://127.0.0.1/callback` in the developer dashboard before the first on-device auth test.
+Register the Spotify redirect URI as `http://127.0.0.1:43821/callback` in the developer dashboard before the first on-device auth test.
 
 ### Commands
 
@@ -1074,9 +1074,9 @@ adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c 
 ### Phase 0: auth and environment gate
 
 - create the Spotify app entry in the dashboard
-- register `http://127.0.0.1/callback` as the redirect URI
+- register `http://127.0.0.1:43821/callback` as the redirect URI
 - implement `PkceGenerator`
-- implement `LoopbackAuthServer.bind()` with dynamic port assignment
+- implement `LoopbackAuthServer.bind()` with a fixed loopback port
 - implement the accounts Retrofit client
 - implement `/authorize` launch, `/api/token` exchange, and refresh
 - prove the full login cycle on the Echo Show with `CustomTabsIntent`
@@ -1168,7 +1168,7 @@ Exit criteria:
 ### Open questions to answer with prototypes
 
 1. Does `CustomTabsIntent` have a working provider on the LineageOS build, or will auth need to fall back to WebView immediately?
-2. Does the browser or WebView reliably reach `127.0.0.1` loopback on-device when the port is dynamically assigned?
+2. Does the browser or WebView reliably reach `127.0.0.1:43821` loopback on-device?
 3. Is the embedded `WebView` path acceptable on this firmware, or should the project immediately adopt the HTTPS broker fallback?
 4. Is true device-owner provisioning available without reflashing again?
 5. How much liquid-glass effect can the device render before frame time becomes unacceptable?
