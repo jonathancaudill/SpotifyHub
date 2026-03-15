@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SpotifyHub</string>
+    <string name="device_admin_description">SpotifyHub kiosk administration</string>
+    <string name="auth_title">Connect Spotify</string>
+    <string name="auth_body">Authorize SpotifyHub with your Spotify account to control playback on your other devices.</string>
+    <string name="auth_primary_action">Connect Spotify</string>
+    <string name="auth_missing_browser">No Custom Tabs browser was found. Falling back to the embedded WebView path.</string>
+    <string name="now_playing_empty_title">Nothing is playing</string>
+    <string name="now_playing_empty_body">Start playback on another Spotify device, then return here.</string>
+</resources>
+
