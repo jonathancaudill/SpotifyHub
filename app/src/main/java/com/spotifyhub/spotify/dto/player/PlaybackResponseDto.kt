@@ -6,6 +6,8 @@ import com.squareup.moshi.JsonClass
 @JsonClass(generateAdapter = true)
 data class PlaybackResponseDto(
     @param:Json(name = "is_playing") val isPlaying: Boolean?,
+    @param:Json(name = "shuffle_state") val shuffleState: Boolean?,
+    @param:Json(name = "repeat_state") val repeatState: String?,
     @param:Json(name = "progress_ms") val progressMs: Long?,
     val item: TrackDto?,
     val device: DeviceDto?,

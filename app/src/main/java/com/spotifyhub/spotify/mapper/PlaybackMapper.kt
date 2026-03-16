@@ -3,6 +3,7 @@ package com.spotifyhub.spotify.mapper
 import com.spotifyhub.playback.model.PlaybackDevice
 import com.spotifyhub.playback.model.PlaybackItem
 import com.spotifyhub.playback.model.PlaybackSnapshot
+import com.spotifyhub.playback.model.RepeatMode
 import com.spotifyhub.spotify.dto.player.PlaybackResponseDto
 import java.time.Instant
 
@@ -14,6 +15,12 @@ object PlaybackMapper {
 
         return PlaybackSnapshot(
             isPlaying = dto.isPlaying == true,
+            isShuffleEnabled = dto.shuffleState == true,
+            repeatMode = when (dto.repeatState) {
+                "context" -> RepeatMode.Context
+                "track" -> RepeatMode.Track
+                else -> RepeatMode.Off
+            },
             progressMs = dto.progressMs ?: 0L,
             durationMs = dto.item?.durationMs ?: 0L,
             fetchedAtEpochMs = Instant.now().toEpochMilli(),

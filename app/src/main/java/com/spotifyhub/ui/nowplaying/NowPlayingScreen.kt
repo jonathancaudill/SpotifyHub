@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,14 +27,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.VolumeDown
+import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
-import androidx.compose.material.icons.rounded.Speaker
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -48,13 +53,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -65,25 +70,34 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.backdrops.LayerBackdrop
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.opacity
-import com.kyant.backdrop.effects.vibrancy
-import com.kyant.backdrop.highlight.Highlight
-import com.kyant.backdrop.shadow.InnerShadow
-import com.kyant.backdrop.shadow.Shadow
+import com.spotifyhub.BuildConfig
 import com.spotifyhub.playback.model.PlaybackDevice
 import com.spotifyhub.playback.model.PlaybackItem
 import com.spotifyhub.playback.model.PlaybackSnapshot
+import com.spotifyhub.playback.model.RepeatMode
 import com.spotifyhub.theme.SpotifyHubTheme
+import com.spotifyhub.ui.nowplaying.backdrop.AlbumBackdropHost
 import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.delay
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+
+private val SidebarShape = RoundedCornerShape(28.dp)
+private val HeroShape = RoundedCornerShape(30.dp)
+private val SecondaryButtonShape = CircleShape
+private val UtilityChipShape = RoundedCornerShape(999.dp)
+private val SidebarSurface = Color(0x3015181D)
+private val SidebarBorder = Color.White.copy(alpha = 0.10f)
+private val ButtonSurface = Color(0x2E15191F)
+private val ButtonSurfacePressed = Color(0x4D20252D)
+private val ButtonBorder = Color.White.copy(alpha = 0.12f)
+private val ButtonActiveSurface = Color(0x29FFFFFF)
+private val ButtonActiveBorder = Color.White.copy(alpha = 0.24f)
+private val ButtonPrimarySurface = Color(0x40FFFFFF)
+private val SurfaceShadow = Color.Black.copy(alpha = 0.26f)
+private val SpotifyGreen = Color(0xFF1ED760)
 
 @Composable
 fun NowPlayingScreen(
@@ -99,6 +113,10 @@ fun NowPlayingScreen(
         onTogglePlayback = viewModel::togglePlayback,
         onSkipNext = viewModel::skipNext,
         onToggleSave = viewModel::toggleSaveCurrentItem,
+        onToggleShuffle = viewModel::toggleShuffle,
+        onCycleRepeat = viewModel::cycleRepeatMode,
+        onVolumeDown = { viewModel.adjustVolume(deltaPercent = -5) },
+        onVolumeUp = { viewModel.adjustVolume(deltaPercent = 5) },
     )
 }
 
@@ -111,17 +129,25 @@ fun NowPlayingScreen(
     onTogglePlayback: () -> Unit,
     onSkipNext: () -> Unit,
     onToggleSave: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onVolumeDown: () -> Unit,
+    onVolumeUp: () -> Unit,
 ) {
     val playback = uiState.playback
-    val backdrop = rememberLayerBackdrop()
-    val backgroundBrush = rememberScreenBackground(playback)
+    var blurEnabled by rememberSaveable { mutableStateOf(true) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(backgroundBrush),
+            .background(Color(0xFF08090B)),
     ) {
-        BackdropArtwork(playback = playback, backdrop = backdrop)
+        AlbumBackdropHost(
+            artworkUrl = playback?.item?.artworkUrl,
+            artworkKey = playback?.item?.id,
+            blurEnabled = blurEnabled,
+            modifier = Modifier.fillMaxSize(),
+        )
 
         Box(
             modifier = Modifier
@@ -129,9 +155,9 @@ fun NowPlayingScreen(
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
-                            Color(0xE60A0C11),
-                            Color(0xCC10151F),
-                            Color(0xDE111A25),
+                            Color(0x2808090C),
+                            Color(0x10090A0C),
+                            Color(0x32060709),
                         ),
                     ),
                 ),
@@ -145,7 +171,6 @@ fun NowPlayingScreen(
         ) {
             SidebarRail(
                 modifier = Modifier.fillMaxHeight(),
-                backdrop = backdrop,
                 isOffline = isOffline,
                 onRefresh = onRefresh,
                 isBusy = uiState.isRefreshing || uiState.isSendingCommand,
@@ -156,8 +181,6 @@ fun NowPlayingScreen(
                     .weight(1f)
                     .fillMaxHeight(),
             ) {
-                AmbientGlowLayer()
-
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -167,6 +190,12 @@ fun NowPlayingScreen(
                     HeaderRow(
                         playback = playback,
                         isOffline = isOffline,
+                        blurEnabled = blurEnabled,
+                        onToggleBlur = if (BuildConfig.DEBUG) {
+                            { blurEnabled = !blurEnabled }
+                        } else {
+                            null
+                        },
                     )
 
                     MainArtworkRow(
@@ -178,14 +207,19 @@ fun NowPlayingScreen(
                     ProgressSection(playback = playback)
 
                     ControlDeck(
-                        backdrop = backdrop,
                         playback = playback,
                         isCurrentItemSaved = uiState.isCurrentItemSaved == true,
-                        enabled = playback?.item != null && !uiState.isSendingCommand,
+                        transportEnabled = playback?.item != null && !uiState.isSendingCommand,
+                        saveEnabled = playback?.item != null && !uiState.isSendingCommand,
+                        utilityEnabled = playback?.device != null && !uiState.isSendingCommand,
                         onSkipPrevious = onSkipPrevious,
                         onTogglePlayback = onTogglePlayback,
                         onSkipNext = onSkipNext,
                         onToggleSave = onToggleSave,
+                        onToggleShuffle = onToggleShuffle,
+                        onCycleRepeat = onCycleRepeat,
+                        onVolumeDown = onVolumeDown,
+                        onVolumeUp = onVolumeUp,
                     )
                 }
             }
@@ -196,15 +230,12 @@ fun NowPlayingScreen(
 @Composable
 private fun SidebarRail(
     modifier: Modifier,
-    backdrop: LayerBackdrop,
     isOffline: Boolean,
     onRefresh: () -> Unit,
     isBusy: Boolean,
 ) {
-    LiquidSidebarSurface(
+    SidebarRailSurface(
         modifier = modifier.width(88.dp),
-        backdrop = backdrop,
-        shape = RoundedCornerShape(28.dp),
     ) {
         Column(
             modifier = Modifier
@@ -230,18 +261,12 @@ private fun SidebarRail(
                     modifier = Modifier
                         .size(44.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF1ED760))
-                        .drawBehind {
-                            drawCircle(
-                                color = Color.White.copy(alpha = 0.28f),
-                                radius = size.minDimension / 2.8f,
-                            )
-                        },
+                        .background(SpotifyGreen),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         text = "S",
-                        color = Color(0xFF07120C),
+                        color = Color(0xFF08110B),
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
                     )
                 }
@@ -252,18 +277,16 @@ private fun SidebarRail(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.2.sp,
                     ),
-                    color = if (isOffline) Color(0xFFFF8B8B) else Color(0xFFB9FFD7),
+                    color = if (isOffline) Color(0xFFFF8B8B) else SpotifyGreen,
                 )
             }
 
-            LiquidIconButton(
+            SecondaryControlButton(
                 onClick = onRefresh,
-                backdrop = backdrop,
-                modifier = Modifier.size(52.dp),
                 enabled = !isBusy,
                 icon = Icons.Rounded.Refresh,
                 contentDescription = "Refresh playback",
-                emphasis = LiquidButtonEmphasis.Subtle,
+                modifier = Modifier.size(52.dp),
             ) {
                 if (isBusy) {
                     CircularProgressIndicator(
@@ -278,9 +301,27 @@ private fun SidebarRail(
 }
 
 @Composable
+private fun SidebarRailSurface(
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .shadow(24.dp, SidebarShape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
+            .clip(SidebarShape)
+            .background(SidebarSurface)
+            .border(1.dp, SidebarBorder, SidebarShape),
+    ) {
+        content()
+    }
+}
+
+@Composable
 private fun HeaderRow(
     playback: PlaybackSnapshot?,
     isOffline: Boolean,
+    blurEnabled: Boolean,
+    onToggleBlur: (() -> Unit)?,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -296,7 +337,7 @@ private fun HeaderRow(
                     modifier = Modifier
                         .size(8.dp)
                         .clip(CircleShape)
-                        .background(if (isOffline) Color(0xFFFF8B8B) else Color(0xFF7BFFB2)),
+                        .background(if (isOffline) Color(0xFFFF8B8B) else SpotifyGreen),
                 )
                 Text(
                     text = if (playback?.isPlaying == true) "NOW PLAYING" else "SPOTIFY CONTROLLER",
@@ -311,25 +352,37 @@ private fun HeaderRow(
             playback?.device?.name?.takeIf { it.isNotBlank() }?.let { deviceName ->
                 Text(
                     text = deviceName,
-                    color = Color(0xFFD7E8FF).copy(alpha = 0.92f),
+                    color = Color.White.copy(alpha = 0.94f),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 )
             }
         }
 
         AnimatedContent(isOffline, label = "connectivity-banner") { offline ->
-            if (offline) {
-                Text(
-                    text = "No network",
-                    color = Color(0xFFFFA7A7),
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                )
-            } else {
-                Text(
-                    text = "Spotify Connect",
-                    color = Color.White.copy(alpha = 0.64f),
-                    style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 0.6.sp),
-                )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (offline) {
+                    Text(
+                        text = "No network",
+                        color = Color(0xFFFFA7A7),
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    )
+                } else {
+                    Text(
+                        text = "Spotify Connect",
+                        color = Color.White.copy(alpha = 0.62f),
+                        style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 0.6.sp),
+                    )
+                }
+
+                onToggleBlur?.let {
+                    ToggleChip(
+                        label = if (blurEnabled) "Blur On" else "Blur Off",
+                        onClick = it,
+                    )
+                }
             }
         }
     }
@@ -373,25 +426,16 @@ private fun ArtworkHero(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(28.dp))
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        Color(0x33FFFFFF),
-                        Color(0x18FFFFFF),
-                        Color(0x08FFFFFF),
-                    ),
-                    start = Offset.Zero,
-                    end = Offset(720f, 720f),
-                ),
-            )
-            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(28.dp)),
+            .shadow(32.dp, HeroShape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
+            .clip(HeroShape)
+            .background(Color(0x2614191F))
+            .border(1.dp, Color.White.copy(alpha = 0.10f), HeroShape),
         contentAlignment = Alignment.Center,
     ) {
         if (artworkUrl != null) {
             Crossfade(
                 targetState = artworkUrl,
-                animationSpec = tween(durationMillis = 550),
+                animationSpec = tween(durationMillis = 450),
                 label = "artwork-crossfade",
             ) { model ->
                 AsyncImage(
@@ -427,7 +471,7 @@ private fun MetadataBlock(
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text(
                 text = if (playback?.isPlaying == true) "CURRENT SESSION" else "READY WHEN YOU ARE",
-                color = Color(0xFFBFE9FF).copy(alpha = 0.82f),
+                color = Color.White.copy(alpha = 0.68f),
                 style = MaterialTheme.typography.labelLarge.copy(
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.3.sp,
@@ -448,7 +492,7 @@ private fun MetadataBlock(
 
             Text(
                 text = item?.artist ?: "Spotify Connect will mirror the active session here.",
-                color = Color(0xFFE8EEF8).copy(alpha = 0.86f),
+                color = Color.White.copy(alpha = 0.84f),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.headlineMedium.copy(
@@ -461,7 +505,7 @@ private fun MetadataBlock(
             item?.album?.takeIf { it.isNotBlank() }?.let { album ->
                 Text(
                     text = album,
-                    color = Color.White.copy(alpha = 0.58f),
+                    color = Color.White.copy(alpha = 0.54f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleMedium.copy(letterSpacing = 0.6.sp),
@@ -500,7 +544,7 @@ private fun MetadataStat(
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             text = label,
-            color = Color.White.copy(alpha = 0.42f),
+            color = Color.White.copy(alpha = 0.40f),
             style = MaterialTheme.typography.labelSmall.copy(
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.2.sp,
@@ -522,9 +566,9 @@ private fun ArtworkPlaceholder() {
             .background(
                 Brush.radialGradient(
                     colors = listOf(
-                        Color(0xFF3B2458).copy(alpha = 0.88f),
-                        Color(0xFF1B365A).copy(alpha = 0.62f),
-                        Color(0xFF0D1018),
+                        Color(0xFF30343C),
+                        Color(0xFF171A1F),
+                        Color(0xFF090A0D),
                     ),
                     radius = 620f,
                 ),
@@ -588,7 +632,7 @@ private fun ProgressSection(playback: PlaybackSnapshot?) {
                 .fillMaxWidth()
                 .height(8.dp)
                 .clip(RoundedCornerShape(99.dp)),
-            color = Color.White,
+            color = Color.White.copy(alpha = 0.96f),
             trackColor = Color.White.copy(alpha = 0.18f),
         )
 
@@ -613,14 +657,19 @@ private fun ProgressSection(playback: PlaybackSnapshot?) {
 
 @Composable
 private fun ControlDeck(
-    backdrop: LayerBackdrop,
     playback: PlaybackSnapshot?,
     isCurrentItemSaved: Boolean,
-    enabled: Boolean,
+    transportEnabled: Boolean,
+    saveEnabled: Boolean,
+    utilityEnabled: Boolean,
     onSkipPrevious: () -> Unit,
     onTogglePlayback: () -> Unit,
     onSkipNext: () -> Unit,
     onToggleSave: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onVolumeDown: () -> Unit,
+    onVolumeUp: () -> Unit,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -641,56 +690,29 @@ private fun ControlDeck(
         }
 
         TransportRow(
-            backdrop = backdrop,
             isPlaying = playback?.isPlaying == true,
-            enabled = enabled,
+            enabled = transportEnabled,
             onSkipPrevious = onSkipPrevious,
             onTogglePlayback = onTogglePlayback,
             onSkipNext = onSkipNext,
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            LiquidIconButton(
-                onClick = onToggleSave,
-                backdrop = backdrop,
-                modifier = Modifier.size(54.dp),
-                enabled = enabled,
-                icon = if (isCurrentItemSaved) Icons.Rounded.Check else Icons.Rounded.Add,
-                contentDescription = if (isCurrentItemSaved) "Remove from library" else "Save to library",
-                emphasis = LiquidButtonEmphasis.Subtle,
-            ) {
-                AnimatedContent(
-                    targetState = isCurrentItemSaved,
-                    label = "save-button-icon",
-                ) { isSaved ->
-                    Icon(
-                        imageVector = if (isSaved) Icons.Rounded.Check else Icons.Rounded.Add,
-                        contentDescription = null,
-                        modifier = Modifier.size(32.dp),
-                        tint = if (enabled) {
-                            if (isSaved) Color(0xFFB9FFD7) else Color.White
-                        } else {
-                            Color.White.copy(alpha = 0.42f)
-                        },
-                    )
-                }
-            }
-            LiquidIconButton(
-                onClick = {},
-                backdrop = backdrop,
-                modifier = Modifier.size(54.dp),
-                enabled = false,
-                icon = Icons.Rounded.Speaker,
-                contentDescription = "Devices",
-                emphasis = LiquidButtonEmphasis.Subtle,
-            )
-        }
+        UtilityTray(
+            playback = playback,
+            isCurrentItemSaved = isCurrentItemSaved,
+            saveEnabled = saveEnabled,
+            utilityEnabled = utilityEnabled,
+            onToggleSave = onToggleSave,
+            onToggleShuffle = onToggleShuffle,
+            onCycleRepeat = onCycleRepeat,
+            onVolumeDown = onVolumeDown,
+            onVolumeUp = onVolumeUp,
+        )
     }
 }
 
 @Composable
 private fun TransportRow(
-    backdrop: Backdrop,
     isPlaying: Boolean,
     enabled: Boolean,
     onSkipPrevious: () -> Unit,
@@ -701,205 +723,218 @@ private fun TransportRow(
         horizontalArrangement = Arrangement.spacedBy(20.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LiquidIconButton(
+        SecondaryControlButton(
             onClick = onSkipPrevious,
-            backdrop = backdrop,
-            modifier = Modifier.size(72.dp),
             enabled = enabled,
             icon = Icons.Rounded.SkipPrevious,
             contentDescription = "Previous track",
-            emphasis = LiquidButtonEmphasis.Subtle,
+            modifier = Modifier.size(72.dp),
         )
 
-        LiquidIconButton(
+        PrimaryTransportButton(
             onClick = onTogglePlayback,
-            backdrop = backdrop,
-            modifier = Modifier.size(96.dp),
             enabled = enabled,
             icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
             contentDescription = if (isPlaying) "Pause playback" else "Play playback",
-            emphasis = LiquidButtonEmphasis.Primary,
-        ) {
-            Icon(
-                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                contentDescription = null,
-                modifier = Modifier.size(46.dp),
-                tint = Color.White,
-            )
-        }
+            modifier = Modifier.size(96.dp),
+        )
 
-        LiquidIconButton(
+        SecondaryControlButton(
             onClick = onSkipNext,
-            backdrop = backdrop,
-            modifier = Modifier.size(72.dp),
             enabled = enabled,
             icon = Icons.Rounded.SkipNext,
             contentDescription = "Next track",
-            emphasis = LiquidButtonEmphasis.Subtle,
+            modifier = Modifier.size(72.dp),
         )
     }
 }
 
 @Composable
-private fun BackdropArtwork(
+private fun UtilityTray(
     playback: PlaybackSnapshot?,
-    backdrop: LayerBackdrop,
+    isCurrentItemSaved: Boolean,
+    saveEnabled: Boolean,
+    utilityEnabled: Boolean,
+    onToggleSave: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onVolumeDown: () -> Unit,
+    onVolumeUp: () -> Unit,
 ) {
-    val context = LocalContext.current
-    val artworkUrl = playback?.item?.artworkUrl
+    val repeatMode = playback?.repeatMode ?: RepeatMode.Off
+    val volumeLabel = playback?.device?.volumePercent?.let { "$it%" } ?: "--"
 
-    if (artworkUrl == null) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .layerBackdrop(backdrop)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFF2A1B1E),
-                            Color(0xFF11151C),
-                            Color(0xFF080B10),
-                        ),
-                    ),
-                ),
-        )
-        return
+    Column(
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            SecondaryControlButton(
+                onClick = onToggleShuffle,
+                enabled = utilityEnabled && playback?.item != null,
+                icon = Icons.Rounded.Shuffle,
+                contentDescription = if (playback?.isShuffleEnabled == true) "Disable shuffle" else "Enable shuffle",
+                modifier = Modifier.size(50.dp),
+                active = playback?.isShuffleEnabled == true,
+            )
+
+            SecondaryControlButton(
+                onClick = onCycleRepeat,
+                enabled = utilityEnabled && playback?.item != null,
+                icon = if (repeatMode == RepeatMode.Track) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+                contentDescription = when (repeatMode) {
+                    RepeatMode.Off -> "Enable repeat"
+                    RepeatMode.Context -> "Repeat playlist or album"
+                    RepeatMode.Track -> "Repeat current track"
+                },
+                modifier = Modifier.size(50.dp),
+                active = repeatMode != RepeatMode.Off,
+            )
+
+            SecondaryControlButton(
+                onClick = onToggleSave,
+                enabled = saveEnabled,
+                icon = if (isCurrentItemSaved) Icons.Rounded.Check else Icons.Rounded.Add,
+                contentDescription = if (isCurrentItemSaved) "Remove from library" else "Save to library",
+                modifier = Modifier.size(50.dp),
+                active = isCurrentItemSaved,
+                iconTint = if (isCurrentItemSaved) SpotifyGreen else Color.White,
+            )
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SecondaryControlButton(
+                onClick = onVolumeDown,
+                enabled = utilityEnabled && playback?.device?.volumePercent != null,
+                icon = Icons.AutoMirrored.Rounded.VolumeDown,
+                contentDescription = "Lower volume",
+                modifier = Modifier.size(46.dp),
+            )
+
+            UtilityChip(label = volumeLabel)
+
+            SecondaryControlButton(
+                onClick = onVolumeUp,
+                enabled = utilityEnabled && playback?.device?.volumePercent != null,
+                icon = Icons.AutoMirrored.Rounded.VolumeUp,
+                contentDescription = "Raise volume",
+                modifier = Modifier.size(46.dp),
+            )
+        }
     }
+}
 
-    AsyncImage(
-        model = ImageRequest.Builder(context)
-            .data(artworkUrl)
-            .crossfade(true)
-            .build(),
-        contentDescription = null,
-        modifier = Modifier
-            .fillMaxSize()
-            .layerBackdrop(backdrop)
-            .graphicsLayer {
-                alpha = 0.88f
-                scaleX = 1.08f
-                scaleY = 1.08f
-            },
-        contentScale = ContentScale.Crop,
+@Composable
+private fun PrimaryTransportButton(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    icon: ImageVector,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+) {
+    SurfaceButton(
+        onClick = onClick,
+        enabled = enabled,
+        icon = icon,
+        contentDescription = contentDescription,
+        modifier = modifier,
+        shape = CircleShape,
+        active = true,
+        primary = true,
+        iconTint = Color.White,
     )
 }
 
 @Composable
-private fun LiquidSidebarSurface(
-    modifier: Modifier,
-    backdrop: LayerBackdrop,
-    shape: Shape,
-    content: @Composable () -> Unit,
+private fun SecondaryControlButton(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    icon: ImageVector,
+    contentDescription: String,
+    modifier: Modifier = Modifier,
+    active: Boolean = false,
+    iconTint: Color = Color.White,
+    content: (@Composable () -> Unit)? = null,
 ) {
-    Box(
-        modifier = modifier.drawBackdrop(
-            backdrop = backdrop,
-            shape = { shape },
-            effects = {
-                vibrancy()
-                blur(6.dp.toPx())
-                lens(12.dp.toPx(), 24.dp.toPx())
-                opacity(0.18f)
-            },
-            highlight = { Highlight.Plain.copy(alpha = 0.92f) },
-            shadow = {
-                Shadow(
-                    radius = 16.dp,
-                    color = Color.Black.copy(alpha = 0.16f),
-                )
-            },
-            innerShadow = {
-                InnerShadow(
-                    radius = 4.dp,
-                    alpha = 0.28f,
-                )
-            },
-            onDrawSurface = {
-                drawRect(Color.White.copy(alpha = 0.09f))
-            },
-        ),
-    ) {
-        content()
-    }
-}
-
-private enum class LiquidButtonEmphasis {
-    Primary,
-    Subtle,
+    SurfaceButton(
+        onClick = onClick,
+        enabled = enabled,
+        icon = icon,
+        contentDescription = contentDescription,
+        modifier = modifier,
+        shape = SecondaryButtonShape,
+        active = active,
+        primary = false,
+        iconTint = iconTint,
+        content = content,
+    )
 }
 
 @Composable
-private fun LiquidIconButton(
+private fun SurfaceButton(
     onClick: () -> Unit,
-    backdrop: Backdrop,
-    modifier: Modifier = Modifier,
     enabled: Boolean,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     contentDescription: String,
-    emphasis: LiquidButtonEmphasis,
-    content: @Composable (() -> Unit)? = null,
+    modifier: Modifier,
+    shape: androidx.compose.ui.graphics.Shape,
+    active: Boolean,
+    primary: Boolean,
+    iconTint: Color,
+    content: (@Composable () -> Unit)? = null,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed && enabled) 0.97f else 1f,
         animationSpec = tween(durationMillis = 120),
-        label = "liquid-button-scale",
+        label = "surface-button-scale",
     )
+
+    val fill = when {
+        primary -> ButtonPrimarySurface
+        active -> ButtonActiveSurface
+        isPressed && enabled -> ButtonSurfacePressed
+        else -> ButtonSurface
+    }
+    val border = when {
+        primary || active -> ButtonActiveBorder
+        else -> ButtonBorder
+    }
 
     Box(
         modifier = modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .drawBackdrop(
-                backdrop = backdrop,
-                shape = { CircleShape },
-                effects = {
-                    vibrancy()
-                    blur(2.dp.toPx())
-                    lens(
-                        refractionHeight = if (emphasis == LiquidButtonEmphasis.Primary) 14.dp.toPx() else 10.dp.toPx(),
-                        refractionAmount = if (emphasis == LiquidButtonEmphasis.Primary) 22.dp.toPx() else 16.dp.toPx(),
-                    )
-                },
-                highlight = {
-                    if (emphasis == LiquidButtonEmphasis.Primary) {
-                        Highlight.Plain.copy(alpha = if (enabled) 1f else 0.45f)
-                    } else {
-                        Highlight.Ambient.copy(alpha = if (enabled) 0.75f else 0.38f)
-                    }
-                },
-                shadow = {
-                    Shadow(
-                        radius = if (emphasis == LiquidButtonEmphasis.Primary) 14.dp else 10.dp,
-                        color = Color.Black.copy(alpha = 0.14f),
-                    )
-                },
-                innerShadow = {
-                    InnerShadow(
-                        radius = if (isPressed) 10.dp else 4.dp,
-                        alpha = if (enabled) 0.30f else 0.18f,
-                    )
-                },
-                onDrawSurface = {
-                    val tint = when (emphasis) {
-                        LiquidButtonEmphasis.Primary -> Color(0xFFC8D7FF)
-                        LiquidButtonEmphasis.Subtle -> Color.White
-                    }
-                    drawRect(tint, blendMode = BlendMode.Hue)
-                    drawRect(
-                        color = tint.copy(alpha = if (emphasis == LiquidButtonEmphasis.Primary) 0.14f else 0.08f),
-                    )
-                },
-            )
+            .shadow(18.dp, shape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
+            .clip(shape)
+            .background(fill)
+            .border(1.dp, border, shape)
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,
-            ),
+            )
+            .drawBehind {
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(alpha = if (primary) 0.14f else 0.08f),
+                            Color.Transparent,
+                        ),
+                        center = Offset(size.width * 0.34f, size.height * 0.26f),
+                        radius = size.maxDimension * 0.76f,
+                    ),
+                    radius = size.maxDimension * 0.76f,
+                    center = Offset(size.width * 0.34f, size.height * 0.26f),
+                )
+            }
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
         contentAlignment = Alignment.Center,
     ) {
         if (content != null) {
@@ -908,56 +943,56 @@ private fun LiquidIconButton(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                modifier = Modifier.size(38.dp),
-                tint = if (enabled) Color.White else Color.White.copy(alpha = 0.42f),
+                modifier = Modifier.size(if (primary) 46.dp else 32.dp),
+                tint = if (enabled) iconTint else iconTint.copy(alpha = 0.42f),
             )
         }
     }
 }
 
 @Composable
-private fun AmbientGlowLayer() {
+private fun UtilityChip(label: String) {
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .drawBehind {
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFF6B2B4E).copy(alpha = 0.24f),
-                            Color.Transparent,
-                        ),
-                        center = Offset(size.width * 0.22f, size.height * 0.38f),
-                        radius = size.width * 0.34f,
-                    ),
-                    radius = size.width * 0.34f,
-                    center = Offset(size.width * 0.22f, size.height * 0.38f),
-                )
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0xFF2A78D3).copy(alpha = 0.20f),
-                            Color.Transparent,
-                        ),
-                        center = Offset(size.width * 0.78f, size.height * 0.72f),
-                        radius = size.width * 0.30f,
-                    ),
-                    radius = size.width * 0.30f,
-                    center = Offset(size.width * 0.78f, size.height * 0.72f),
-                )
-            },
-    )
+            .clip(UtilityChipShape)
+            .background(Color(0x2215191F))
+            .border(1.dp, Color.White.copy(alpha = 0.10f), UtilityChipShape)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.84f),
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp,
+            ),
+        )
+    }
 }
 
 @Composable
-private fun rememberScreenBackground(playback: PlaybackSnapshot?): Brush {
-    return remember(playback?.item?.id) {
-        val seed = (playback?.item?.id ?: "spotifyhub").hashCode()
-        val left = Color(0xFF11141D).mix(Color(0xFF6F233B), seed, 0)
-        val center = Color(0xFF111923).mix(Color(0xFF2C4E9E), seed, 1)
-        val right = Color(0xFF091019).mix(Color(0xFF15324D), seed, 2)
-
-        Brush.linearGradient(colors = listOf(left, center, right))
+private fun ToggleChip(
+    label: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(UtilityChipShape)
+            .background(Color(0x2A15191F))
+            .border(1.dp, Color.White.copy(alpha = 0.14f), UtilityChipShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.88f),
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.8.sp,
+            ),
+        )
     }
 }
 
@@ -1009,16 +1044,6 @@ private fun formatDuration(durationMs: Long): String {
     return "%d:%02d".format(minutes, seconds)
 }
 
-private fun Color.mix(other: Color, seed: Int, salt: Int): Color {
-    val mix = (((seed shr (salt * 4)) and 0xFF) / 255f).coerceIn(0.18f, 0.82f)
-    return Color(
-        red = (red * (1f - mix)) + (other.red * mix),
-        green = (green * (1f - mix)) + (other.green * mix),
-        blue = (blue * (1f - mix)) + (other.blue * mix),
-        alpha = 1f,
-    )
-}
-
 private data class NowPlayingPreviewState(
     val name: String,
     val uiState: PlayerUiState,
@@ -1034,6 +1059,8 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
             uiState = PlayerUiState(
                 playback = PlaybackSnapshot(
                     isPlaying = true,
+                    isShuffleEnabled = true,
+                    repeatMode = RepeatMode.Context,
                     progressMs = 102_000L,
                     durationMs = 230_000L,
                     fetchedAtEpochMs = System.currentTimeMillis() - 800L,
@@ -1063,6 +1090,8 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
             uiState = PlayerUiState(
                 playback = PlaybackSnapshot(
                     isPlaying = false,
+                    isShuffleEnabled = false,
+                    repeatMode = RepeatMode.Track,
                     progressMs = 201_000L,
                     durationMs = 259_000L,
                     fetchedAtEpochMs = System.currentTimeMillis() - 15_000L,
@@ -1114,6 +1143,10 @@ private fun NowPlayingWidePreview(
             onTogglePlayback = {},
             onSkipNext = {},
             onToggleSave = {},
+            onToggleShuffle = {},
+            onCycleRepeat = {},
+            onVolumeDown = {},
+            onVolumeUp = {},
         )
     }
 }

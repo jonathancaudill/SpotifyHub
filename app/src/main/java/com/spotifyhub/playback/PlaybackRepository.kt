@@ -3,6 +3,7 @@ package com.spotifyhub.playback
 import com.spotifyhub.auth.SessionState
 import com.spotifyhub.auth.SpotifyAuthRepository
 import com.spotifyhub.playback.model.PlaybackSnapshot
+import com.spotifyhub.playback.model.RepeatMode
 import com.spotifyhub.spotify.api.SpotifyLibraryApi
 import com.spotifyhub.spotify.api.SpotifyPlayerApi
 import com.spotifyhub.spotify.mapper.PlaybackMapper
@@ -132,6 +133,37 @@ class PlaybackRepository(
         }
     }
 
+    fun toggleShuffle() {
+        appScope.launch {
+            val nextShuffleState = _playbackState.value?.isShuffleEnabled != true
+            executeCommand(command = { playerApi.setShuffle(enabled = nextShuffleState) })
+        }
+    }
+
+    fun cycleRepeatMode() {
+        appScope.launch {
+            val nextRepeatMode = when (_playbackState.value?.repeatMode ?: RepeatMode.Off) {
+                RepeatMode.Off -> RepeatMode.Context
+                RepeatMode.Context -> RepeatMode.Track
+                RepeatMode.Track -> RepeatMode.Off
+            }
+            executeCommand(
+                command = { playerApi.setRepeatMode(repeatMode = nextRepeatMode.toApiValue()) },
+            )
+        }
+    }
+
+    fun adjustVolume(deltaPercent: Int) {
+        appScope.launch {
+            val currentVolume = _playbackState.value?.device?.volumePercent ?: return@launch
+            val nextVolume = (currentVolume + deltaPercent).coerceIn(0, 100)
+            if (nextVolume == currentVolume) {
+                return@launch
+            }
+            executeCommand(command = { playerApi.setVolume(volumePercent = nextVolume) })
+        }
+    }
+
     private suspend fun syncCurrentItemSavedState(itemUri: String?) {
         val normalizedUri = itemUri?.takeIf(String::isNotBlank)
         if (normalizedUri == null) {
@@ -170,5 +202,13 @@ class PlaybackRepository(
         delay(200L)
         fetchPlayback()
         _isSendingCommand.value = false
+    }
+
+    private fun RepeatMode.toApiValue(): String {
+        return when (this) {
+            RepeatMode.Off -> "off"
+            RepeatMode.Context -> "context"
+            RepeatMode.Track -> "track"
+        }
     }
 }

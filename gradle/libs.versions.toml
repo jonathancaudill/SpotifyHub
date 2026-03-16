@@ -13,8 +13,6 @@ coil = "2.7.0"
 browser = "1.9.0"
 appcompat = "1.7.1"
 security-crypto = "1.1.0"
-palette = "1.0.0"
-liquid-glass = "1.0.6"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
@@ -26,7 +24,6 @@ androidx-lifecycle-viewmodel-ktx = { module = "androidx.lifecycle:lifecycle-view
 androidx-browser = { module = "androidx.browser:browser", version.ref = "browser" }
 androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "appcompat" }
 androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "security-crypto" }
-androidx-palette-ktx = { module = "androidx.palette:palette-ktx", version.ref = "palette" }
 
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 androidx-compose-ui = { module = "androidx.compose.ui:ui" }
@@ -47,8 +44,6 @@ moshi-kotlin-codegen = { module = "com.squareup.moshi:moshi-kotlin-codegen", ver
 
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 coil-okhttp = { module = "io.coil-kt:coil-network-okhttp", version.ref = "coil" }
-
-android-liquid-glass = { module = "io.github.kyant0:backdrop", version.ref = "liquid-glass" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 
 [plugins]

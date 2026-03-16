@@ -23,4 +23,19 @@ interface SpotifyPlayerApi {
 
     @POST("v1/me/player/previous")
     suspend fun skipPrevious()
+
+    @PUT("v1/me/player/shuffle")
+    suspend fun setShuffle(
+        @Query("state") enabled: Boolean,
+    )
+
+    @PUT("v1/me/player/repeat")
+    suspend fun setRepeatMode(
+        @Query("state") repeatMode: String,
+    )
+
+    @PUT("v1/me/player/volume")
+    suspend fun setVolume(
+        @Query("volume_percent") volumePercent: Int,
+    )
 }

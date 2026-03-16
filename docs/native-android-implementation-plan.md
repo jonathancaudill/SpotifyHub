@@ -4,7 +4,7 @@ Validated against the Spotify and Android docs on 2026-03-15.
 
 ## Implementation progress
 
-Status updated on 2026-03-15 after auth validation, landscape UI correction, the first AndroidLiquidGlass refactor, and real library save-toggle implementation.
+Status updated on 2026-03-15 after auth validation, landscape UI correction, real library save-toggle implementation, and the GL backdrop / neutral-chrome rewrite.
 
 ### Completed in repo
 
@@ -31,28 +31,35 @@ Status updated on 2026-03-15 after auth validation, landscape UI correction, the
 - Basic kiosk shell implemented with immersive mode entry, HOME/LAUNCHER manifest wiring, boot receiver, and device-admin receiver stub
 - Horizontal-first now-playing UI implemented with:
   - landscape orientation baseline
-  - glass-heavy artwork-led layout inspired by CarPlay and Nocturne
-  - AndroidLiquidGlass backdrop surfaces for the rail and main panel
+  - artwork-led composition with dedicated GL backdrop host under the Compose chrome
   - local progress interpolation between poll intervals
   - Compose preview for fast UI iteration
-- Visual refinement pass completed on the now-playing screen:
-  - denser metadata hierarchy and lower control deck
-  - stronger empty-artwork placeholder treatment for Studio previews
-  - atmospheric glow layers and more intentional panel spacing
-- AndroidLiquidGlass usage corrected on the now-playing screen:
-  - one structural liquid sidebar surface instead of broad frosted panels
-  - transport and utility controls now built as explicit liquid buttons using `drawBackdrop`, `lens`, `highlight`, and shadow
-  - main content area returned to an open artwork-led composition instead of nested glass cards
 - Save control on the now-playing screen now matches the current Spotify pattern more closely:
   - heart placeholder removed
   - utility control uses a `+` icon that animates into a checkmark
   - button is enabled only when a current playback item exists and no command is already in flight
+- The now-playing backdrop has been rewritten around actual artwork distortion instead of palette extraction:
+  - `AlbumBackdropHost` embeds a `GLSurfaceView` under the Compose UI
+  - the fragment shader composites multiple twisted/blurred copies of the current and previous album art
+  - track changes crossfade between previous and current artwork textures over the shader transition
+  - idle / missing-art states use a bundled neutral monochrome fallback texture generated in code
+  - no backdrop code uses `Palette` or sampled artwork colors anymore
+- The now-playing chrome has been rewritten around fixed neutral surfaces:
+  - `AndroidLiquidGlass` usage is removed from the screen
+  - transport, utility, and rail surfaces now use fixed graphite/white styling for readability over the GL backdrop
+  - progress fill is fixed white instead of artwork-tinted
+- More Spotify player controls are now implemented end-to-end:
+  - playback state now maps shuffle and repeat mode from `GET /v1/me/player`
+  - shuffle toggle uses `PUT /v1/me/player/shuffle`
+  - repeat cycling uses `PUT /v1/me/player/repeat`
+  - volume adjustment uses `PUT /v1/me/player/volume`
+  - the now-playing utility tray now exposes shuffle, repeat, save, and volume controls instead of a dead placeholder device button
 
 ### Intentionally not finished yet
 
 - Embedded WebView auth fallback is not implemented yet; the current code uses Custom Tabs first and generic browser intent second
-- Shuffle, repeat, transfer, volume, and device switching remain pending
-- Adaptive artwork palette extraction, browse overlays, and device switcher UI are still pending
+- Transfer playback and device switching remain pending
+- Browse overlays and a real device switcher UI are still pending
 - HID/encoder routing is only a stub
 - Device-owner lock-task provisioning code is still pending beyond manifest and receiver scaffolding
 
@@ -64,23 +71,26 @@ Status updated on 2026-03-15 after auth validation, landscape UI correction, the
 - The current build therefore uses Moshi reflection plus `KotlinJsonAdapterFactory` instead of Moshi codegen
 - `EncryptedSharedPreferences` currently builds with deprecation warnings. That matches the original plan, but it should be revisited once the first auth spike is proven on hardware
 - The current UI now targets landscape directly because BlueStacks validation proved that the original rotated-portrait assumption was wrong for the intended appliance layout
+- The backdrop implementation now relies on OpenGL ES 2.0 rather than Compose-only drawing because the shipping target is Android 11 and cannot use `RuntimeShader` / AGSL
 
 ### Practical handoff notes for future agents
 
 - The user already proved the auth path works in BlueStacks and explicitly reported that the API/auth structure is working.
 - The user rejected the original rotated portrait assumption. Treat this app as landscape-first unless real Echo Show testing proves otherwise.
 - The current redirect URI in both code and plan is the fixed loopback callback `http://127.0.0.1:43821/callback`. Do not silently switch back to a dynamic port without verifying the Spotify dashboard accepts that registration flow again.
-- The user explicitly pushed back on “CSS glass” styling. The current direction is:
-  - one structural liquid sidebar surface
-  - actual AndroidLiquidGlass-backed controls for transport and utility actions
-  - open main content area over the artwork background
-- The user wants the visual language to stay between CarPlay and Nocturne, but with restrained use of liquid glass rather than blanket frosted panels.
+- The user explicitly pushed back on fake palette gradients and on “CSS glass” styling.
+- The current visual direction is:
+  - actual artwork-driven distortion in the backdrop rather than sampled/tinted colors
+  - fixed neutral chrome over the animated backdrop rather than `AndroidLiquidGlass`
+  - open artwork-led main composition instead of heavy paneling
 - The save button now works end-to-end and the user explicitly confirmed it. Do not regress it back to a heart icon; the current direction is Spotify-style `+` to checkmark.
 - Important Spotify API gotcha already discovered in this repo:
   - `GET /v1/me/library/contains` uses the `uris` query parameter
   - the matching save/remove endpoints also expect `uris` as a query parameter
   - an earlier incorrect body-based implementation compiled and read state correctly but failed to toggle library membership
-- The next high-value visual/UX tasks are adaptive artwork colors and cleanup of the remaining placeholder/disabled actions, not more structural panel layering.
+- The last pass already landed real shuffle/repeat/volume controls.
+- The background treatment has now moved away from palette extraction entirely and toward a shader-based artwork distortion field.
+- The next high-value UX work is device switching and browse overlays, not more structural panel layering.
 - Local toolchain context on this machine:
   - `JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home`
   - `ANDROID_SDK_ROOT=$HOME/Library/Android/sdk`
@@ -91,10 +101,10 @@ Status updated on 2026-03-15 after auth validation, landscape UI correction, the
 
 ### Recommended next implementation steps
 
-1. Implement adaptive artwork palette extraction and feed it into the now-playing background and liquid-button tinting.
-2. Replace the remaining placeholder disabled utility actions with real volume, shuffle/repeat, and device-switcher behavior.
+1. Implement transfer playback plus a real device switcher overlay on top of the existing player/device APIs.
+2. Build the browse overlays for recently played and playlists so the utility surface is no longer playback-only.
 3. Decide whether the embedded WebView fallback is acceptable, or explicitly document that the project requires Custom Tabs / browser auth only.
-4. Test the current landscape UI and liquid effects on the actual Echo Show hardware before increasing blur, refraction, or animation complexity.
+4. Test the current landscape UI and GL backdrop performance on the actual Echo Show hardware before increasing blur or distortion complexity.
 
 ## 0. Working assumptions
 

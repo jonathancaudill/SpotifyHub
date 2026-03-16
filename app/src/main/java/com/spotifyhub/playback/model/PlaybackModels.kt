@@ -2,6 +2,8 @@ package com.spotifyhub.playback.model
 
 data class PlaybackSnapshot(
     val isPlaying: Boolean,
+    val isShuffleEnabled: Boolean,
+    val repeatMode: RepeatMode,
     val progressMs: Long,
     val durationMs: Long,
     val fetchedAtEpochMs: Long,
@@ -24,3 +26,9 @@ data class PlaybackDevice(
     val type: String,
     val volumePercent: Int?,
 )
+
+enum class RepeatMode {
+    Off,
+    Context,
+    Track,
+}

@@ -60,4 +60,16 @@ class PlayerViewModel(
     fun toggleSaveCurrentItem() {
         playbackRepository.toggleSaveCurrentItem()
     }
+
+    fun toggleShuffle() {
+        playbackRepository.toggleShuffle()
+    }
+
+    fun cycleRepeatMode() {
+        playbackRepository.cycleRepeatMode()
+    }
+
+    fun adjustVolume(deltaPercent: Int) {
+        playbackRepository.adjustVolume(deltaPercent)
+    }
 }
