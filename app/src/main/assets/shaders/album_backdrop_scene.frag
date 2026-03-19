@@ -12,29 +12,8 @@ uniform float uPreviousAspect;
 
 varying vec2 vTexCoord;
 
-vec2 coverUv(vec2 uv, float textureAspect) {
-    float screenAspect = uResolution.x / max(uResolution.y, 1.0);
-    vec2 scaled = uv;
-    if (textureAspect > screenAspect) {
-        float scale = screenAspect / textureAspect;
-        scaled.x = (uv.x - 0.5) * scale + 0.5;
-    } else {
-        float scale = textureAspect / screenAspect;
-        scaled.y = (uv.y - 0.5) * scale + 0.5;
-    }
-    return clamp(scaled, 0.0, 1.0);
-}
-
-vec2 rotate(vec2 point, float angle) {
-    float s = sin(angle);
-    float c = cos(angle);
-    return vec2(
-        point.x * c - point.y * s,
-        point.x * s + point.y * c
-    );
-}
-
-// Apple-style twist: squared distance ratio for dramatic flowing distortion.
+// Apple-style twist: squared distance ratio.
+// Applied once to the entire scene (not per-copy).
 vec2 twist(vec2 coord, vec2 offset, float radius, float angle) {
     coord -= offset;
     float dist = length(coord);
@@ -50,139 +29,131 @@ vec2 twist(vec2 coord, vec2 offset, float radius, float angle) {
     return coord;
 }
 
-vec2 mirroredUv(vec2 uv) {
-    vec2 tiled = fract(uv);
-    return mix(vec2(0.002), vec2(0.998), abs(tiled * 2.0 - 1.0));
+vec2 rotate(vec2 point, float angle) {
+    float s = sin(angle);
+    float c = cos(angle);
+    return vec2(point.x * c - point.y * s,
+                point.x * s + point.y * c);
 }
 
-// Boost saturation for vivid Apple-style colors.
-vec3 saturate(vec3 color, float amount) {
-    float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    return mix(vec3(lum), color, amount);
-}
-
-// Sample a single layer: a copy of the artwork at a given scale,
-// with rotation/orbit and heavy twist distortion.
-vec4 sampleLayer(
+// Sample one square copy of the artwork.
+// size = fraction of viewport width (e.g. 1.25 = 125%)
+// center = copy center in UV space
+// rot = spin angle
+// Returns vec4 with alpha=0 outside the copy's square bounds.
+vec4 sampleCopy(
     sampler2D tex,
     vec2 uv,
-    float aspect,
-    vec4 seed,
-    float time,
-    float scale,         // size relative to viewport (0.25 = 25%)
-    float twistAngle,    // twist strength (radians, use large values!)
-    float twistRadius,   // twist radius in UV space
-    vec2 orbitCenter,    // center of circular orbit track
-    float orbitRadius,   // radius of orbit (0 = spin in place)
-    float spinSpeed,     // rotation speed
-    float orbitSpeed     // orbit track speed
+    float textureAspect,
+    float screenAspect,
+    float size,
+    vec2 center,
+    float rot
 ) {
-    // Start with cover-fit UVs
-    vec2 baseUv = coverUv(uv, aspect);
+    // Position relative to copy center, in aspect-corrected space
+    // so the copy appears square on screen.
+    vec2 pos = uv - center;
+    pos.y /= screenAspect;
 
-    // Center coordinates
-    vec2 centered = baseUv - 0.5;
+    // Scale: the copy covers `size` of viewport width
+    pos /= max(size, 0.001);
 
-    // Scale the copy
-    centered /= max(scale, 0.01);
+    // Undo the copy's spin rotation
+    pos = rotate(pos, -rot);
 
-    // Spin rotation
-    float spinAngle = time * spinSpeed * (seed.x - 0.5) + seed.z * 6.2831;
-    centered = rotate(centered, spinAngle);
+    // Now pos is in copy-local space: [-0.5, 0.5] = the artwork square
+    vec2 texUv = pos + 0.5;
 
-    // Offset by orbit position (small copies orbit, large copies stay put)
-    vec2 orbit = vec2(
-        cos(time * orbitSpeed + seed.y * 6.2831),
-        sin(time * orbitSpeed + seed.w * 6.2831)
-    ) * orbitRadius;
+    // Outside the square? Transparent.
+    if (texUv.x < 0.0 || texUv.x > 1.0 || texUv.y < 0.0 || texUv.y > 1.0) {
+        return vec4(0.0);
+    }
 
-    vec2 finalUv = centered + 0.5 + orbit;
+    // Handle non-square artwork (cover-fit within the square)
+    vec2 artUv = texUv;
+    if (textureAspect > 1.0) {
+        artUv.x = (texUv.x - 0.5) / textureAspect + 0.5;
+    } else {
+        artUv.y = (texUv.y - 0.5) * textureAspect + 0.5;
+    }
+    artUv = clamp(artUv, 0.0, 1.0);
 
-    // Apply heavy twist distortion
-    vec2 twistCenter = vec2(
-        0.5 + (seed.x - 0.5) * 0.4,
-        0.5 + (seed.y - 0.5) * 0.4
-    );
-    finalUv = twist(finalUv, twistCenter, twistRadius, twistAngle);
-
-    return texture2D(tex, mirroredUv(finalUv));
+    return vec4(texture2D(tex, artUv).rgb, 1.0);
 }
 
-vec4 sampleArtworkField(
+vec3 sampleArtworkField(
     sampler2D tex,
     vec2 uv,
     float aspect,
     vec4 seed,
     float time
 ) {
-    // Layer 0: 125% scale — large background, spins in place only
-    vec4 layer0 = sampleLayer(
-        tex, uv, aspect, seed,
-        time,
-        1.25,                                    // scale
-        3.8 + seed.x * 1.2,                      // twist angle (strong!)
-        0.9 + seed.y * 0.2,                      // twist radius
-        vec2(0.5),                                // orbit center (unused)
-        0.0,                                      // orbit radius (none — spin only)
-        0.03,                                     // spin speed
-        0.0                                       // orbit speed
+    float screenAspect = uResolution.x / max(uResolution.y, 1.0);
+
+    // ---- Global twist (applied to entire scene, not per-copy) ----
+    // Work in aspect-corrected space so twist is circular on screen.
+    vec2 twistCoord = uv - 0.5;
+    twistCoord.y /= screenAspect;
+    // Radius ~80% of viewport width, angle toned down from reference's -3.25
+    float twistRadius = 0.8;
+    float twistAngle = -2.0 - seed.x * 0.5;
+    vec2 twistOffset = vec2(
+        (seed.y - 0.5) * 0.05,
+        (seed.z - 0.5) * 0.05
+    );
+    twistCoord = twist(twistCoord, twistOffset, twistRadius, twistAngle);
+    twistCoord.y *= screenAspect;
+    vec2 tUv = twistCoord + 0.5;
+
+    // ---- Spin angles ----
+    // Matched to reference: sprite 0 slowest, sprite 1 fastest, etc.
+    // Reference at 30fps: 0.003, -0.008, -0.006, +0.004 per frame
+    // Convert to radians/sec (* 30):
+    float spin0 = time * 0.09;
+    float spin1 = time * -0.24;
+    float spin2 = time * -0.18;
+    float spin3 = time * 0.12;
+
+    // ---- Centers ----
+    // Sprites 0,1: stationary (1 is slightly offset per reference)
+    // Sprites 2,3: orbit on circular tracks
+    vec2 center0 = vec2(0.5, 0.5);
+    vec2 center1 = vec2(0.5 / 2.5 * 2.0, 0.5 / 2.5 * 2.0);
+    // Reference: orbit radius = screenWidth/4 → 0.25 in UV-x space
+    // Orbit angle tied to spin * 0.75
+    vec2 center2 = vec2(
+        0.5 + 0.25 * cos(spin2 * 0.75),
+        0.5 + 0.25 * screenAspect * sin(spin2 * 0.75)
+    );
+    vec2 center3 = vec2(
+        0.5 + 0.05 + 0.25 * cos(spin3 * 0.75),
+        0.5 + 0.05 * screenAspect + 0.25 * screenAspect * sin(spin3 * 0.75)
     );
 
-    // Layer 1: 80% scale — medium, spins in place
-    vec4 layer1 = sampleLayer(
-        tex, uv, aspect, seed.yzwx,
-        time,
-        0.80,
-        -4.5 - seed.z * 1.5,                     // opposite twist direction
-        0.85 + seed.w * 0.2,
-        vec2(0.5),
-        0.0,                                      // no orbit
-        -0.025,                                   // spin (opposite dir)
-        0.0
-    );
+    // ---- Sample 4 copies (back to front, largest first) ----
+    vec4 c0 = sampleCopy(tex, tUv, aspect, screenAspect, 1.25, center0, spin0);
+    vec4 c1 = sampleCopy(tex, tUv, aspect, screenAspect, 0.80, center1, spin1);
+    vec4 c2 = sampleCopy(tex, tUv, aspect, screenAspect, 0.50, center2, spin2);
+    vec4 c3 = sampleCopy(tex, tUv, aspect, screenAspect, 0.25, center3, spin3);
 
-    // Layer 2: 50% scale — small, orbits + spins
-    vec4 layer2 = sampleLayer(
-        tex, uv, aspect, seed.zwxy,
-        time,
-        0.50,
-        5.2 + seed.y * 1.8,
-        0.75 + seed.x * 0.2,
-        vec2(0.5),
-        0.08 + seed.z * 0.04,                    // orbits on a circular track
-        0.04,
-        0.02 + seed.w * 0.01
-    );
+    // ---- Composite back to front ----
+    vec3 color = vec3(0.0);
+    color = mix(color, c0.rgb, c0.a);
+    color = mix(color, c1.rgb, c1.a);
+    color = mix(color, c2.rgb, c2.a);
+    color = mix(color, c3.rgb, c3.a);
 
-    // Layer 3: 25% scale — smallest, orbits + spins
-    vec4 layer3 = sampleLayer(
-        tex, uv, aspect, seed.wxyz,
-        time,
-        0.25,
-        -6.0 - seed.w * 2.0,                     // strongest twist
-        0.65 + seed.z * 0.2,
-        vec2(0.5),
-        0.12 + seed.x * 0.06,                    // larger orbit
-        -0.05,
-        -0.03 + seed.y * 0.01
-    );
+    // ---- Saturation boost ----
+    // Reference uses 2.75x; we use a bit less for taste.
+    float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    color = mix(vec3(lum), color, 2.0);
 
-    // Blend layers: largest on bottom, progressively overlay smaller ones.
-    // Use opacity to let layers underneath show through.
-    vec3 color = layer0.rgb;
-    color = mix(color, layer1.rgb, 0.6);
-    color = mix(color, layer2.rgb, 0.45);
-    color = mix(color, layer3.rgb, 0.35);
-
-    // Boost saturation for vivid colors (Apple oversaturates)
-    color = saturate(color, 1.35);
-
-    return vec4(color, 1.0);
+    return color;
 }
 
 void main() {
-    vec4 previousField = sampleArtworkField(uPreviousTexture, vTexCoord, uPreviousAspect, uPreviousSeed, uTime);
-    vec4 currentField = sampleArtworkField(uCurrentTexture, vTexCoord, uCurrentAspect, uCurrentSeed, uTime);
-    vec3 color = mix(previousField, currentField, smoothstep(0.0, 1.0, uTransition)).rgb;
+    vec3 previousField = sampleArtworkField(uPreviousTexture, vTexCoord, uPreviousAspect, uPreviousSeed, uTime);
+    vec3 currentField = sampleArtworkField(uCurrentTexture, vTexCoord, uCurrentAspect, uCurrentSeed, uTime);
+    vec3 color = mix(previousField, currentField, smoothstep(0.0, 1.0, uTransition));
     gl_FragColor = vec4(color, 1.0);
 }

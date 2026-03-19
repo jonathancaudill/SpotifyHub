@@ -29,8 +29,13 @@ class AlbumBackdropRenderer(
 ) : GLSurfaceView.Renderer {
     private companion object {
         const val OFFSCREEN_SCALE = 0.50f
-        // Kawase blur pass offsets — each pass samples diagonals at increasing distance.
-        val KAWASE_OFFSETS = floatArrayOf(0f, 1f, 2f, 3f, 4f)
+        // Kawase blur pass offsets — many passes with large offsets to match the
+        // reference's BlurFilter(100, 10, 1, 15) which is an enormous blur.
+        // Each pass is cheap (5 texture samples), so 16 passes is fine.
+        val KAWASE_OFFSETS = floatArrayOf(
+            0f, 1f, 2f, 3f, 5f, 7f, 10f, 14f,
+            19f, 25f, 32f, 40f, 50f, 62f, 76f, 92f,
+        )
     }
 
     private val quadVertices: FloatBuffer = ByteBuffer
