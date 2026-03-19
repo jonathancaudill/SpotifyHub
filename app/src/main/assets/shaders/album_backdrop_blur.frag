@@ -2,28 +2,28 @@ precision mediump float;
 
 uniform sampler2D uTexture;
 uniform vec2 uTexelSize;
-uniform vec2 uDirection;
 uniform float uApplyVignette;
-uniform float uBlurScale;
+uniform float uKawaseOffset;
 
 varying vec2 vTexCoord;
 
+// Kawase blur: samples the center and four diagonal neighbors at a
+// configurable offset. Each pass widens the effective radius without
+// the tiling/refraction artifacts of a large-kernel Gaussian at low res.
 void main() {
-    vec2 step = uDirection * uTexelSize * uBlurScale;
+    float off = uKawaseOffset + 0.5;
+    vec2 ts = uTexelSize;
 
-    vec3 color = texture2D(uTexture, vTexCoord).rgb * 0.204164;
-    color += texture2D(uTexture, vTexCoord + step * 1.0).rgb * 0.180174;
-    color += texture2D(uTexture, vTexCoord - step * 1.0).rgb * 0.180174;
-    color += texture2D(uTexture, vTexCoord + step * 2.0).rgb * 0.123832;
-    color += texture2D(uTexture, vTexCoord - step * 2.0).rgb * 0.123832;
-    color += texture2D(uTexture, vTexCoord + step * 3.0).rgb * 0.066282;
-    color += texture2D(uTexture, vTexCoord - step * 3.0).rgb * 0.066282;
-    color += texture2D(uTexture, vTexCoord + step * 4.0).rgb * 0.027631;
-    color += texture2D(uTexture, vTexCoord - step * 4.0).rgb * 0.027631;
+    vec3 color = texture2D(uTexture, vTexCoord).rgb;
+    color += texture2D(uTexture, vTexCoord + vec2(-off, -off) * ts).rgb;
+    color += texture2D(uTexture, vTexCoord + vec2( off, -off) * ts).rgb;
+    color += texture2D(uTexture, vTexCoord + vec2(-off,  off) * ts).rgb;
+    color += texture2D(uTexture, vTexCoord + vec2( off,  off) * ts).rgb;
+    color /= 5.0;
 
     if (uApplyVignette > 0.5) {
         float vignette = smoothstep(1.16, 0.12, distance(vTexCoord, vec2(0.5)));
-        color *= mix(0.95, 1.0, vignette);
+        color *= mix(0.92, 1.0, vignette);
     }
 
     gl_FragColor = vec4(min(color, vec3(0.98)), 1.0);

@@ -28,8 +28,9 @@ class AlbumBackdropRenderer(
     private val appContext: Context,
 ) : GLSurfaceView.Renderer {
     private companion object {
-        const val OFFSCREEN_SCALE = 0.28f
-        const val BLUR_SCALE = 4.0f
+        const val OFFSCREEN_SCALE = 0.50f
+        // Kawase blur pass offsets — each pass samples diagonals at increasing distance.
+        val KAWASE_OFFSETS = floatArrayOf(0f, 1f, 2f, 3f, 4f)
     }
 
     private val quadVertices: FloatBuffer = ByteBuffer
@@ -75,9 +76,8 @@ class AlbumBackdropRenderer(
     private var blurTexCoordHandle = 0
     private var blurTextureHandle = 0
     private var blurTexelSizeHandle = 0
-    private var blurDirectionHandle = 0
     private var blurApplyVignetteHandle = 0
-    private var blurScaleHandle = 0
+    private var blurKawaseOffsetHandle = 0
 
     private var currentSeed = BackdropSeedFactory.from("idle")
     private var previousSeed = currentSeed
@@ -119,9 +119,8 @@ class AlbumBackdropRenderer(
         blurTexCoordHandle = GLES20.glGetAttribLocation(blurProgram, "aTexCoord")
         blurTextureHandle = GLES20.glGetUniformLocation(blurProgram, "uTexture")
         blurTexelSizeHandle = GLES20.glGetUniformLocation(blurProgram, "uTexelSize")
-        blurDirectionHandle = GLES20.glGetUniformLocation(blurProgram, "uDirection")
         blurApplyVignetteHandle = GLES20.glGetUniformLocation(blurProgram, "uApplyVignette")
-        blurScaleHandle = GLES20.glGetUniformLocation(blurProgram, "uBlurScale")
+        blurKawaseOffsetHandle = GLES20.glGetUniformLocation(blurProgram, "uKawaseOffset")
 
         GLES20.glGenTextures(sourceTextureIds.size, sourceTextureIds, 0)
         sourceTextureIds.forEach(::configureTexture)
@@ -160,30 +159,32 @@ class AlbumBackdropRenderer(
         }
 
         if (blurEnabled) {
+            // Pass 1: render scene to FBO 0
             renderScene(
                 outputFramebuffer = framebufferIds[0],
                 width = offscreenWidth,
                 height = offscreenHeight,
                 transition = transition,
             )
-            blurFramebufferPass(
-                inputTexture = framebufferTextureIds[0],
-                outputFramebuffer = framebufferIds[1],
-                width = offscreenWidth,
-                height = offscreenHeight,
-                directionX = 1f,
-                directionY = 0f,
-                applyVignette = false,
-            )
-            blurFramebufferPass(
-                inputTexture = framebufferTextureIds[1],
-                outputFramebuffer = 0,
-                width = viewportWidth,
-                height = viewportHeight,
-                directionX = 0f,
-                directionY = 1f,
-                applyVignette = true,
-            )
+
+            // Passes 2+: Kawase blur, ping-ponging between FBO 0 and FBO 1.
+            // Each pass reads from one FBO and writes to the other.
+            for (i in KAWASE_OFFSETS.indices) {
+                val isLastPass = i == KAWASE_OFFSETS.lastIndex
+                val inputTexture = framebufferTextureIds[i % 2]
+                val outputFbo = if (isLastPass) 0 else framebufferIds[(i + 1) % 2]
+                val outputWidth = if (isLastPass) viewportWidth else offscreenWidth
+                val outputHeight = if (isLastPass) viewportHeight else offscreenHeight
+
+                kawaseBlurPass(
+                    inputTexture = inputTexture,
+                    outputFramebuffer = outputFbo,
+                    width = outputWidth,
+                    height = outputHeight,
+                    kawaseOffset = KAWASE_OFFSETS[i],
+                    applyVignette = isLastPass,
+                )
+            }
         } else {
             renderScene(
                 outputFramebuffer = 0,
@@ -252,13 +253,12 @@ class AlbumBackdropRenderer(
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }
 
-    private fun blurFramebufferPass(
+    private fun kawaseBlurPass(
         inputTexture: Int,
         outputFramebuffer: Int,
         width: Int,
         height: Int,
-        directionX: Float,
-        directionY: Float,
+        kawaseOffset: Float,
         applyVignette: Boolean,
     ) {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer)
@@ -272,9 +272,8 @@ class AlbumBackdropRenderer(
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, inputTexture)
         GLES20.glUniform1i(blurTextureHandle, 0)
         GLES20.glUniform2f(blurTexelSizeHandle, 1f / offscreenWidth.toFloat(), 1f / offscreenHeight.toFloat())
-        GLES20.glUniform2f(blurDirectionHandle, directionX, directionY)
         GLES20.glUniform1f(blurApplyVignetteHandle, if (applyVignette) 1f else 0f)
-        GLES20.glUniform1f(blurScaleHandle, BLUR_SCALE)
+        GLES20.glUniform1f(blurKawaseOffsetHandle, kawaseOffset)
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }

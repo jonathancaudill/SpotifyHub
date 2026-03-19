@@ -34,37 +34,20 @@ vec2 rotate(vec2 point, float angle) {
     );
 }
 
-vec2 twist(vec2 uv, vec2 center, float strength, float radius) {
-    vec2 delta = uv - center;
-    float distanceFromCenter = length(delta);
-    float influence = smoothstep(radius, 0.0, distanceFromCenter);
-    float angle = influence * strength;
-    return center + rotate(delta, angle);
-}
-
-float bandMask(vec2 uv, vec2 normal, float center, float halfWidth, float feather) {
-    float axis = dot(uv - 0.5, normalize(normal));
-    float distanceToBand = abs(axis - center);
-    return 1.0 - smoothstep(halfWidth, halfWidth + feather, distanceToBand);
-}
-
-float sideReveal(vec2 uv, vec2 direction, float threshold, float feather) {
-    float axis = dot(uv, normalize(direction));
-    return 1.0 - smoothstep(threshold, threshold + feather, axis);
-}
-
-float wedgeMask(
-    vec2 uv,
-    vec2 bandDirection,
-    float center,
-    float halfWidth,
-    float feather,
-    vec2 revealDirection,
-    float revealThreshold
-) {
-    float band = bandMask(uv, bandDirection, center, halfWidth, feather);
-    float reveal = sideReveal(uv, revealDirection, revealThreshold, feather * 2.0);
-    return band * reveal;
+// Apple-style twist: squared distance ratio for dramatic flowing distortion.
+vec2 twist(vec2 coord, vec2 offset, float radius, float angle) {
+    coord -= offset;
+    float dist = length(coord);
+    if (dist < radius) {
+        float ratioDist = (radius - dist) / radius;
+        float angleMod = ratioDist * ratioDist * angle;
+        float s = sin(angleMod);
+        float c = cos(angleMod);
+        coord = vec2(coord.x * c - coord.y * s,
+                     coord.x * s + coord.y * c);
+    }
+    coord += offset;
+    return coord;
 }
 
 vec2 mirroredUv(vec2 uv) {
@@ -72,110 +55,129 @@ vec2 mirroredUv(vec2 uv) {
     return mix(vec2(0.002), vec2(0.998), abs(tiled * 2.0 - 1.0));
 }
 
+// Boost saturation for vivid Apple-style colors.
+vec3 saturate(vec3 color, float amount) {
+    float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
+    return mix(vec3(lum), color, amount);
+}
+
+// Sample a single layer: a copy of the artwork at a given scale,
+// with rotation/orbit and heavy twist distortion.
 vec4 sampleLayer(
-    sampler2D textureSampler,
+    sampler2D tex,
     vec2 uv,
     float aspect,
     vec4 seed,
     float time,
-    float scale,
-    float twistStrength,
-    float speed
+    float scale,         // size relative to viewport (0.25 = 25%)
+    float twistAngle,    // twist strength (radians, use large values!)
+    float twistRadius,   // twist radius in UV space
+    vec2 orbitCenter,    // center of circular orbit track
+    float orbitRadius,   // radius of orbit (0 = spin in place)
+    float spinSpeed,     // rotation speed
+    float orbitSpeed     // orbit track speed
 ) {
+    // Start with cover-fit UVs
     vec2 baseUv = coverUv(uv, aspect);
+
+    // Center coordinates
     vec2 centered = baseUv - 0.5;
-    float angle = (seed.z - 0.5) * 0.3 + time * speed * (seed.w - 0.5);
-    vec2 rotated = rotate(centered, angle);
-    vec2 drift = vec2(
-        sin(time * (0.12 + seed.x * 0.08) + seed.y * 6.2831),
-        cos(time * (0.10 + seed.z * 0.07) + seed.w * 6.2831)
-    ) * (0.05 + seed.x * 0.03);
-    vec2 scaled = rotated * scale + 0.5 + drift;
+
+    // Scale the copy
+    centered /= max(scale, 0.01);
+
+    // Spin rotation
+    float spinAngle = time * spinSpeed * (seed.x - 0.5) + seed.z * 6.2831;
+    centered = rotate(centered, spinAngle);
+
+    // Offset by orbit position (small copies orbit, large copies stay put)
+    vec2 orbit = vec2(
+        cos(time * orbitSpeed + seed.y * 6.2831),
+        sin(time * orbitSpeed + seed.w * 6.2831)
+    ) * orbitRadius;
+
+    vec2 finalUv = centered + 0.5 + orbit;
+
+    // Apply heavy twist distortion
     vec2 twistCenter = vec2(
-        0.5 + (seed.x - 0.5) * 0.22,
-        0.5 + (seed.y - 0.5) * 0.22
+        0.5 + (seed.x - 0.5) * 0.4,
+        0.5 + (seed.y - 0.5) * 0.4
     );
-    vec2 warped = twist(scaled, twistCenter, twistStrength, 0.62 + seed.z * 0.18);
-    return texture2D(textureSampler, mirroredUv(warped));
+    finalUv = twist(finalUv, twistCenter, twistRadius, twistAngle);
+
+    return texture2D(tex, mirroredUv(finalUv));
 }
 
 vec4 sampleArtworkField(
-    sampler2D textureSampler,
+    sampler2D tex,
     vec2 uv,
     float aspect,
     vec4 seed,
     float time
 ) {
-    vec4 base = sampleLayer(textureSampler, uv, aspect, seed, time, 1.28, 0.08 + seed.x * 0.06, 0.018);
-    vec4 sliceA = sampleLayer(textureSampler, uv, aspect, seed.yzwx, time, 1.84, -0.22 - seed.y * 0.10, 0.011);
-    vec4 sliceB = sampleLayer(textureSampler, uv, aspect, seed.zwxy, time, 1.68, 0.24 + seed.z * 0.10, 0.010);
-    vec4 sliceC = sampleLayer(textureSampler, uv, aspect, seed.wxyz, time, 1.96, -0.30 - seed.w * 0.12, 0.009);
-    vec4 sliceD = sampleLayer(textureSampler, uv, aspect, seed.xzyw, time, 1.56, 0.18 + seed.x * 0.10, 0.012);
-
-    vec2 uvA = uv + vec2(sin(time * 0.08 + seed.x * 6.2831) * 0.018, cos(time * 0.04 + seed.y * 6.2831) * 0.010);
-    vec2 uvB = uv + vec2(cos(time * 0.05 + seed.z * 6.2831) * 0.014, cos(time * 0.06 + seed.w * 6.2831) * 0.015);
-    vec2 uvC = uv + vec2(sin(time * 0.03 + seed.y * 6.2831) * 0.012, sin(time * 0.07 + seed.z * 6.2831) * 0.017);
-    vec2 uvD = uv + vec2(cos(time * 0.09 + seed.w * 6.2831) * 0.016, sin(time * 0.05 + seed.x * 6.2831) * 0.010);
-
-    float maskA = wedgeMask(
-        uvA,
-        vec2(0.95, -0.30),
-        -0.12 + seed.x * 0.12,
-        0.22 + seed.y * 0.06,
-        0.030,
-        vec2(1.0, 0.0),
-        0.52
+    // Layer 0: 125% scale — large background, spins in place only
+    vec4 layer0 = sampleLayer(
+        tex, uv, aspect, seed,
+        time,
+        1.25,                                    // scale
+        3.8 + seed.x * 1.2,                      // twist angle (strong!)
+        0.9 + seed.y * 0.2,                      // twist radius
+        vec2(0.5),                                // orbit center (unused)
+        0.0,                                      // orbit radius (none — spin only)
+        0.03,                                     // spin speed
+        0.0                                       // orbit speed
     );
 
-    float maskB = wedgeMask(
-        uvB,
-        vec2(-0.76, -0.64),
-        0.02 - seed.z * 0.10,
-        0.18 + seed.w * 0.05,
-        0.030,
-        vec2(0.0, 1.0),
-        0.54
+    // Layer 1: 80% scale — medium, spins in place
+    vec4 layer1 = sampleLayer(
+        tex, uv, aspect, seed.yzwx,
+        time,
+        0.80,
+        -4.5 - seed.z * 1.5,                     // opposite twist direction
+        0.85 + seed.w * 0.2,
+        vec2(0.5),
+        0.0,                                      // no orbit
+        -0.025,                                   // spin (opposite dir)
+        0.0
     );
 
-    float maskC = wedgeMask(
-        uvC,
-        vec2(-0.22, 0.98),
-        0.16 - seed.y * 0.10,
-        0.15 + seed.x * 0.04,
-        0.028,
-        vec2(-1.0, 0.0),
-        0.48
+    // Layer 2: 50% scale — small, orbits + spins
+    vec4 layer2 = sampleLayer(
+        tex, uv, aspect, seed.zwxy,
+        time,
+        0.50,
+        5.2 + seed.y * 1.8,
+        0.75 + seed.x * 0.2,
+        vec2(0.5),
+        0.08 + seed.z * 0.04,                    // orbits on a circular track
+        0.04,
+        0.02 + seed.w * 0.01
     );
 
-    float maskD = wedgeMask(
-        uvD,
-        vec2(0.54, 0.84),
-        -0.18 + seed.w * 0.10,
-        0.21 + seed.z * 0.05,
-        0.032,
-        vec2(0.0, -1.0),
-        0.50
+    // Layer 3: 25% scale — smallest, orbits + spins
+    vec4 layer3 = sampleLayer(
+        tex, uv, aspect, seed.wxyz,
+        time,
+        0.25,
+        -6.0 - seed.w * 2.0,                     // strongest twist
+        0.65 + seed.z * 0.2,
+        vec2(0.5),
+        0.12 + seed.x * 0.06,                    // larger orbit
+        -0.05,
+        -0.03 + seed.y * 0.01
     );
 
-    float used = 0.0;
-    maskA *= 1.0 - used;
-    used = max(used, maskA);
-    maskB *= 1.0 - used;
-    used = max(used, maskB);
-    maskC *= 1.0 - used;
-    used = max(used, maskC);
-    maskD *= 1.0 - used;
+    // Blend layers: largest on bottom, progressively overlay smaller ones.
+    // Use opacity to let layers underneath show through.
+    vec3 color = layer0.rgb;
+    color = mix(color, layer1.rgb, 0.6);
+    color = mix(color, layer2.rgb, 0.45);
+    color = mix(color, layer3.rgb, 0.35);
 
-    vec3 combined = base.rgb;
-    combined = mix(combined, sliceA.rgb, maskA);
-    combined = mix(combined, sliceB.rgb, maskB);
-    combined = mix(combined, sliceC.rgb, maskC);
-    combined = mix(combined, sliceD.rgb, maskD);
+    // Boost saturation for vivid colors (Apple oversaturates)
+    color = saturate(color, 1.35);
 
-    float luminance = dot(combined, vec3(0.2126, 0.7152, 0.0722));
-    combined = mix(combined, vec3(luminance), 0.01);
-
-    return vec4(combined, 1.0);
+    return vec4(color, 1.0);
 }
 
 void main() {
