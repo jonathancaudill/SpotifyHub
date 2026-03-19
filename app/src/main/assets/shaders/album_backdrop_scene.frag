@@ -106,13 +106,11 @@ vec3 sampleArtworkField(
     vec2 tUv = twistCoord + 0.5;
 
     // ---- Spin angles ----
-    // Matched to reference: sprite 0 slowest, sprite 1 fastest, etc.
-    // Reference at 30fps: 0.003, -0.008, -0.006, +0.004 per frame
-    // Convert to radians/sec (* 30):
-    float spin0 = time * 0.09;
-    float spin1 = time * -0.24;
-    float spin2 = time * -0.18;
-    float spin3 = time * 0.12;
+    // Based on reference speeds, halved for a calmer feel.
+    float spin0 = time * 0.045;
+    float spin1 = time * -0.12;
+    float spin2 = time * -0.09;
+    float spin3 = time * 0.06;
 
     // ---- Centers ----
     // Sprites 0,1: stationary (1 is slightly offset per reference)
@@ -142,11 +140,6 @@ vec3 sampleArtworkField(
     color = mix(color, c1.rgb, c1.a);
     color = mix(color, c2.rgb, c2.a);
     color = mix(color, c3.rgb, c3.a);
-
-    // ---- Saturation boost ----
-    // Reference uses 2.75x; we use a bit less for taste.
-    float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
-    color = mix(vec3(lum), color, 2.0);
 
     return color;
 }

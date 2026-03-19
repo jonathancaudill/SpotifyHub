@@ -29,13 +29,16 @@ class AlbumBackdropRenderer(
 ) : GLSurfaceView.Renderer {
     private companion object {
         const val OFFSCREEN_SCALE = 0.50f
-        // Kawase blur pass offsets — many passes with large offsets to match the
-        // reference's BlurFilter(100, 10, 1, 15) which is an enormous blur.
-        // Each pass is cheap (5 texture samples), so 16 passes is fine.
-        val KAWASE_OFFSETS = floatArrayOf(
-            0f, 1f, 2f, 3f, 5f, 7f, 10f, 14f,
-            19f, 25f, 32f, 40f, 50f, 62f, 76f, 92f,
-        )
+        const val SATURATION = 2.0f
+
+        // Matches aadishv's polished LyricsScene.ts stacked Kawase approach:
+        //   KawaseBlurFilter(5, 1)   → 1 pass,  offset 5
+        //   KawaseBlurFilter(10, 1)  → 1 pass,  offset 10
+        //   KawaseBlurFilter(20, 2)  → 2 passes, offsets 20, 10
+        //   KawaseBlurFilter(40, 2)  → 2 passes, offsets 40, 20
+        //   KawaseBlurFilter(80, 2)  → 2 passes, offsets 80, 40
+        // Total: 8 passes, progressive doubling for massive blur radius.
+        val KAWASE_OFFSETS = floatArrayOf(5f, 10f, 20f, 10f, 40f, 20f, 80f, 40f)
     }
 
     private val quadVertices: FloatBuffer = ByteBuffer
@@ -83,6 +86,7 @@ class AlbumBackdropRenderer(
     private var blurTexelSizeHandle = 0
     private var blurApplyVignetteHandle = 0
     private var blurKawaseOffsetHandle = 0
+    private var blurSaturationHandle = 0
 
     private var currentSeed = BackdropSeedFactory.from("idle")
     private var previousSeed = currentSeed
@@ -126,6 +130,7 @@ class AlbumBackdropRenderer(
         blurTexelSizeHandle = GLES20.glGetUniformLocation(blurProgram, "uTexelSize")
         blurApplyVignetteHandle = GLES20.glGetUniformLocation(blurProgram, "uApplyVignette")
         blurKawaseOffsetHandle = GLES20.glGetUniformLocation(blurProgram, "uKawaseOffset")
+        blurSaturationHandle = GLES20.glGetUniformLocation(blurProgram, "uSaturation")
 
         GLES20.glGenTextures(sourceTextureIds.size, sourceTextureIds, 0)
         sourceTextureIds.forEach(::configureTexture)
@@ -172,8 +177,7 @@ class AlbumBackdropRenderer(
                 transition = transition,
             )
 
-            // Passes 2+: Kawase blur, ping-ponging between FBO 0 and FBO 1.
-            // Each pass reads from one FBO and writes to the other.
+            // Stacked Kawase blur passes, ping-ponging between FBOs.
             for (i in KAWASE_OFFSETS.indices) {
                 val isLastPass = i == KAWASE_OFFSETS.lastIndex
                 val inputTexture = framebufferTextureIds[i % 2]
@@ -188,6 +192,7 @@ class AlbumBackdropRenderer(
                     height = outputHeight,
                     kawaseOffset = KAWASE_OFFSETS[i],
                     applyVignette = isLastPass,
+                    saturation = if (isLastPass) SATURATION else 1f,
                 )
             }
         } else {
@@ -265,6 +270,7 @@ class AlbumBackdropRenderer(
         height: Int,
         kawaseOffset: Float,
         applyVignette: Boolean,
+        saturation: Float,
     ) {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer)
         GLES20.glViewport(0, 0, width, height)
@@ -279,6 +285,7 @@ class AlbumBackdropRenderer(
         GLES20.glUniform2f(blurTexelSizeHandle, 1f / offscreenWidth.toFloat(), 1f / offscreenHeight.toFloat())
         GLES20.glUniform1f(blurApplyVignetteHandle, if (applyVignette) 1f else 0f)
         GLES20.glUniform1f(blurKawaseOffsetHandle, kawaseOffset)
+        GLES20.glUniform1f(blurSaturationHandle, saturation)
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }
