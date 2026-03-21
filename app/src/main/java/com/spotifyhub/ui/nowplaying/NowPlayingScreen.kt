@@ -4,11 +4,14 @@ import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -21,19 +24,17 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.VolumeDown
-import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Repeat
 import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.SkipNext
@@ -41,36 +42,46 @@ import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.tooling.preview.PreviewParameterProvider
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.spotifyhub.BuildConfig
 import com.spotifyhub.playback.model.PlaybackDevice
 import com.spotifyhub.playback.model.PlaybackItem
 import com.spotifyhub.playback.model.PlaybackSnapshot
@@ -79,25 +90,22 @@ import com.spotifyhub.theme.SpotifyHubTheme
 import com.spotifyhub.ui.nowplaying.backdrop.AlbumBackdropHost
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 
-private val SidebarShape = RoundedCornerShape(28.dp)
-private val HeroShape = RoundedCornerShape(30.dp)
-private val SecondaryButtonShape = CircleShape
-private val UtilityChipShape = RoundedCornerShape(999.dp)
-private val SidebarSurface = Color(0x3015181D)
-private val SidebarBorder = Color.White.copy(alpha = 0.10f)
-private val ButtonSurface = Color(0x2E15191F)
-private val ButtonSurfacePressed = Color(0x4D20252D)
-private val ButtonBorder = Color.White.copy(alpha = 0.12f)
-private val ButtonActiveSurface = Color(0x29FFFFFF)
-private val ButtonActiveBorder = Color.White.copy(alpha = 0.24f)
-private val ButtonPrimarySurface = Color(0x40FFFFFF)
-private val SurfaceShadow = Color.Black.copy(alpha = 0.26f)
+/* ── Shape & colour tokens ─────────────────────────────────────────── */
+
+private val SidebarShape = RoundedCornerShape(24.dp)
+private val ArtworkShape = RoundedCornerShape(18.dp)
+
+private val SidebarSurface = Color(0x2415181D)
+private val SidebarBorder = Color.White.copy(alpha = 0.08f)
+private val SurfaceShadow = Color.Black.copy(alpha = 0.20f)
 private val SpotifyGreen = Color(0xFF1ED760)
+
+private val PressCircleColor = Color.White.copy(alpha = 0.14f)
+
+/* ── Public entry-point ────────────────────────────────────────────── */
 
 @Composable
 fun NowPlayingScreen(
@@ -115,10 +123,11 @@ fun NowPlayingScreen(
         onToggleSave = viewModel::toggleSaveCurrentItem,
         onToggleShuffle = viewModel::toggleShuffle,
         onCycleRepeat = viewModel::cycleRepeatMode,
-        onVolumeDown = { viewModel.adjustVolume(deltaPercent = -5) },
-        onVolumeUp = { viewModel.adjustVolume(deltaPercent = 5) },
+        onSeek = viewModel::seekTo,
     )
 }
+
+/* ── Root layout ───────────────────────────────────────────────────── */
 
 @Composable
 fun NowPlayingScreen(
@@ -131,24 +140,26 @@ fun NowPlayingScreen(
     onToggleSave: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
-    onVolumeDown: () -> Unit,
-    onVolumeUp: () -> Unit,
+    onSeek: (Long) -> Unit,
 ) {
     val playback = uiState.playback
-    var blurEnabled by rememberSaveable { mutableStateOf(true) }
+    val maxPasses = 8
+    var blurPassCount by rememberSaveable { mutableStateOf(maxPasses) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF08090B)),
     ) {
+        /* Dynamic album-art backdrop (unchanged) */
         AlbumBackdropHost(
             artworkUrl = playback?.item?.artworkUrl,
             artworkKey = playback?.item?.id,
-            blurEnabled = blurEnabled,
+            blurPassCount = blurPassCount,
             modifier = Modifier.fillMaxSize(),
         )
 
+        /* Subtle gradient overlay */
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -163,103 +174,129 @@ fun NowPlayingScreen(
                 ),
         )
 
+        /* Debug: blur pass stepper */
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.Black.copy(alpha = 0.5f))
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(enabled = blurPassCount > 0) {
+                        blurPassCount = (blurPassCount - 1).coerceAtLeast(0)
+                    }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = "\u2212",
+                    color = if (blurPassCount > 0) Color.White else Color.White.copy(alpha = 0.3f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Text(
+                text = "BLUR $blurPassCount/$maxPasses",
+                color = Color.White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 4.dp),
+            )
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable(enabled = blurPassCount < maxPasses) {
+                        blurPassCount = (blurPassCount + 1).coerceAtMost(maxPasses)
+                    }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = "+",
+                    color = if (blurPassCount < maxPasses) Color.White else Color.White.copy(alpha = 0.3f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+
+        /* Content */
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(18.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             SidebarRail(
-                modifier = Modifier.fillMaxHeight(),
                 isOffline = isOffline,
-                onRefresh = onRefresh,
-                isBusy = uiState.isRefreshing || uiState.isSendingCommand,
+                modifier = Modifier.fillMaxHeight(),
             )
 
-            Box(
+            MainContent(
+                playback = playback,
+                isBusy = uiState.isRefreshing,
+                isCurrentItemSaved = uiState.isCurrentItemSaved == true,
+                transportEnabled = playback?.item != null && !uiState.isSendingCommand,
+                saveEnabled = playback?.item != null && !uiState.isSendingCommand,
+                utilityEnabled = playback?.device != null && !uiState.isSendingCommand,
+                onSkipPrevious = onSkipPrevious,
+                onTogglePlayback = onTogglePlayback,
+                onSkipNext = onSkipNext,
+                onToggleSave = onToggleSave,
+                onToggleShuffle = onToggleShuffle,
+                onCycleRepeat = onCycleRepeat,
+                onSeek = onSeek,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                ) {
-                    HeaderRow(
-                        playback = playback,
-                        isOffline = isOffline,
-                        blurEnabled = blurEnabled,
-                        onToggleBlur = if (BuildConfig.DEBUG) {
-                            { blurEnabled = !blurEnabled }
-                        } else {
-                            null
-                        },
-                    )
-
-                    MainArtworkRow(
-                        playback = playback,
-                        isBusy = uiState.isRefreshing,
-                        modifier = Modifier.weight(1f),
-                    )
-
-                    ProgressSection(playback = playback)
-
-                    ControlDeck(
-                        playback = playback,
-                        isCurrentItemSaved = uiState.isCurrentItemSaved == true,
-                        transportEnabled = playback?.item != null && !uiState.isSendingCommand,
-                        saveEnabled = playback?.item != null && !uiState.isSendingCommand,
-                        utilityEnabled = playback?.device != null && !uiState.isSendingCommand,
-                        onSkipPrevious = onSkipPrevious,
-                        onTogglePlayback = onTogglePlayback,
-                        onSkipNext = onSkipNext,
-                        onToggleSave = onToggleSave,
-                        onToggleShuffle = onToggleShuffle,
-                        onCycleRepeat = onCycleRepeat,
-                        onVolumeDown = onVolumeDown,
-                        onVolumeUp = onVolumeUp,
-                    )
-                }
-            }
+            )
         }
     }
 }
 
+/* ── Sidebar (minimal) ─────────────────────────────────────────────── */
+
 @Composable
 private fun SidebarRail(
-    modifier: Modifier,
     isOffline: Boolean,
-    onRefresh: () -> Unit,
-    isBusy: Boolean,
+    modifier: Modifier = Modifier,
 ) {
-    SidebarRailSurface(
-        modifier = modifier.width(88.dp),
+    Box(
+        modifier = modifier
+            .width(62.dp)
+            .shadow(16.dp, SidebarShape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
+            .clip(SidebarShape)
+            .background(SidebarSurface)
+            .border(1.dp, SidebarBorder, SidebarShape),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(vertical = 18.dp, horizontal = 14.dp),
+                .padding(vertical = 16.dp, horizontal = 10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
+            /* Top: clock */
+            Text(
+                text = rememberClockLabel(),
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.4.sp,
+                ),
+                color = Color.White,
+            )
+
+            /* Center: Spotify logo */
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(
-                    text = rememberClockLabel(),
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 0.5.sp,
-                    ),
-                    color = Color.White,
-                )
-
                 Box(
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .background(SpotifyGreen),
                     contentAlignment = Alignment.Center,
@@ -267,13 +304,13 @@ private fun SidebarRail(
                     Text(
                         text = "S",
                         color = Color(0xFF08110B),
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
                     )
                 }
 
                 Text(
                     text = if (isOffline) "OFF" else "LIVE",
-                    style = MaterialTheme.typography.labelMedium.copy(
+                    style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.2.sp,
                     ),
@@ -281,139 +318,132 @@ private fun SidebarRail(
                 )
             }
 
-            SecondaryControlButton(
-                onClick = onRefresh,
-                enabled = !isBusy,
-                icon = Icons.Rounded.Refresh,
-                contentDescription = "Refresh playback",
-                modifier = Modifier.size(52.dp),
-            ) {
-                if (isBusy) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp,
-                    )
-                }
-            }
+            /* Bottom spacer to balance layout */
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
 
-@Composable
-private fun SidebarRailSurface(
-    modifier: Modifier,
-    content: @Composable () -> Unit,
-) {
-    Box(
-        modifier = modifier
-            .shadow(24.dp, SidebarShape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
-            .clip(SidebarShape)
-            .background(SidebarSurface)
-            .border(1.dp, SidebarBorder, SidebarShape),
-    ) {
-        content()
-    }
-}
+/* ── Main content area ─────────────────────────────────────────────── */
 
 @Composable
-private fun HeaderRow(
-    playback: PlaybackSnapshot?,
-    isOffline: Boolean,
-    blurEnabled: Boolean,
-    onToggleBlur: (() -> Unit)?,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (isOffline) Color(0xFFFF8B8B) else SpotifyGreen),
-                )
-                Text(
-                    text = if (playback?.isPlaying == true) "NOW PLAYING" else "SPOTIFY CONTROLLER",
-                    color = Color.White.copy(alpha = 0.76f),
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.4.sp,
-                    ),
-                )
-            }
-
-            playback?.device?.name?.takeIf { it.isNotBlank() }?.let { deviceName ->
-                Text(
-                    text = deviceName,
-                    color = Color.White.copy(alpha = 0.94f),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                )
-            }
-        }
-
-        AnimatedContent(isOffline, label = "connectivity-banner") { offline ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (offline) {
-                    Text(
-                        text = "No network",
-                        color = Color(0xFFFFA7A7),
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                    )
-                } else {
-                    Text(
-                        text = "Spotify Connect",
-                        color = Color.White.copy(alpha = 0.62f),
-                        style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 0.6.sp),
-                    )
-                }
-
-                onToggleBlur?.let {
-                    ToggleChip(
-                        label = if (blurEnabled) "Blur On" else "Blur Off",
-                        onClick = it,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MainArtworkRow(
+private fun MainContent(
     playback: PlaybackSnapshot?,
     isBusy: Boolean,
+    isCurrentItemSaved: Boolean,
+    transportEnabled: Boolean,
+    saveEnabled: Boolean,
+    utilityEnabled: Boolean,
+    onSkipPrevious: () -> Unit,
+    onTogglePlayback: () -> Unit,
+    onSkipNext: () -> Unit,
+    onToggleSave: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(28.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Column(
+        modifier = modifier.padding(horizontal = 6.dp, vertical = 4.dp),
     ) {
-        ArtworkHero(
-            artworkUrl = playback?.item?.artworkUrl,
-            title = playback?.item?.title,
-            isBusy = isBusy,
+        /* Hero zone: left column (metadata + transport) | right column (artwork) */
+        Row(
             modifier = Modifier
-                .weight(0.36f)
-                .aspectRatio(1f),
-        )
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            /* Left: metadata stacked above transport */
+            Column(
+                modifier = Modifier.weight(0.58f),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                val item = playback?.item
 
-        MetadataBlock(
+                Text(
+                    text = item?.title ?: "Not Playing",
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.headlineLarge.copy(
+                        fontSize = 34.sp,
+                        lineHeight = 38.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = item?.artist ?: "Connect to start listening",
+                    color = Color.White.copy(alpha = 0.85f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                    ),
+                )
+
+                item?.album?.takeIf { it.isNotBlank() }?.let { album ->
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = album,
+                        color = Color.White.copy(alpha = 0.50f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 16.sp,
+                            letterSpacing = 0.3.sp,
+                        ),
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                /* Transport controls — same column, below metadata */
+                TransportRow(
+                    isPlaying = playback?.isPlaying == true,
+                    enabled = transportEnabled,
+                    onSkipPrevious = onSkipPrevious,
+                    onTogglePlayback = onTogglePlayback,
+                    onSkipNext = onSkipNext,
+                )
+            }
+
+            /* Right: album artwork */
+            ArtworkHero(
+                artworkUrl = playback?.item?.artworkUrl,
+                title = playback?.item?.title,
+                isBusy = isBusy,
+                modifier = Modifier
+                    .weight(0.42f)
+                    .aspectRatio(1f),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        /* Progress bar — full width */
+        ProgressSection(playback = playback, onSeek = onSeek)
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        /* Utility row: shuffle, repeat, save */
+        UtilityRow(
             playback = playback,
-            modifier = Modifier.weight(0.64f),
+            isCurrentItemSaved = isCurrentItemSaved,
+            saveEnabled = saveEnabled,
+            utilityEnabled = utilityEnabled,
+            onToggleSave = onToggleSave,
+            onToggleShuffle = onToggleShuffle,
+            onCycleRepeat = onCycleRepeat,
         )
     }
 }
+
+/* ── Artwork ───────────────────────────────────────────────────────── */
 
 @Composable
 private fun ArtworkHero(
@@ -426,10 +456,10 @@ private fun ArtworkHero(
 
     Box(
         modifier = modifier
-            .shadow(32.dp, HeroShape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
-            .clip(HeroShape)
-            .background(Color(0x2614191F))
-            .border(1.dp, Color.White.copy(alpha = 0.10f), HeroShape),
+            .shadow(24.dp, ArtworkShape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
+            .clip(ArtworkShape)
+            .background(Color(0x2014191F))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), ArtworkShape),
         contentAlignment = Alignment.Center,
     ) {
         if (artworkUrl != null) {
@@ -449,112 +479,10 @@ private fun ArtworkHero(
                 )
             }
         } else if (isBusy) {
-            CircularProgressIndicator(color = Color.White)
+            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
         } else {
             ArtworkPlaceholder()
         }
-    }
-}
-
-@Composable
-private fun MetadataBlock(
-    playback: PlaybackSnapshot?,
-    modifier: Modifier = Modifier,
-) {
-    val item = playback?.item
-    val volumeLabel = playback?.device?.volumePercent?.let { "$it%" }
-
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(
-                text = if (playback?.isPlaying == true) "CURRENT SESSION" else "READY WHEN YOU ARE",
-                color = Color.White.copy(alpha = 0.68f),
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.3.sp,
-                ),
-            )
-
-            Text(
-                text = item?.title ?: "Start playback on another device",
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.headlineLarge.copy(
-                    fontSize = 44.sp,
-                    lineHeight = 46.sp,
-                    fontWeight = FontWeight.Black,
-                ),
-            )
-
-            Text(
-                text = item?.artist ?: "Spotify Connect will mirror the active session here.",
-                color = Color.White.copy(alpha = 0.84f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontSize = 25.sp,
-                    lineHeight = 29.sp,
-                    fontWeight = FontWeight.SemiBold,
-                ),
-            )
-
-            item?.album?.takeIf { it.isNotBlank() }?.let { album ->
-                Text(
-                    text = album,
-                    color = Color.White.copy(alpha = 0.54f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleMedium.copy(letterSpacing = 0.6.sp),
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                MetadataStat(
-                    label = "SESSION",
-                    value = if (playback?.item != null) "Remote" else "Idle",
-                )
-
-                playback?.device?.type?.takeIf { it.isNotBlank() }?.let { type ->
-                    MetadataStat(
-                        label = "OUTPUT",
-                        value = type,
-                    )
-                }
-
-                volumeLabel?.let { volume ->
-                    MetadataStat(
-                        label = "VOLUME",
-                        value = volume,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MetadataStat(
-    label: String,
-    value: String,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = label,
-            color = Color.White.copy(alpha = 0.40f),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp,
-            ),
-        )
-        Text(
-            text = value,
-            color = Color.White.copy(alpha = 0.84f),
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
-        )
     }
 }
 
@@ -572,144 +500,26 @@ private fun ArtworkPlaceholder() {
                     ),
                     radius = 620f,
                 ),
-            )
-            .drawBehind {
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.10f),
-                    radius = size.minDimension * 0.34f,
-                    center = Offset(size.width * 0.46f, size.height * 0.48f),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 10.dp.toPx()),
-                )
-                drawCircle(
-                    color = Color.White.copy(alpha = 0.06f),
-                    radius = size.minDimension * 0.20f,
-                    center = Offset(size.width * 0.46f, size.height * 0.48f),
-                )
-            },
+            ),
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(62.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "S",
-                    color = Color.White,
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Black),
-                )
-            }
-
-            Text(
-                text = "Waiting for artwork",
-                color = Color.White.copy(alpha = 0.84f),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ProgressSection(playback: PlaybackSnapshot?) {
-    val progressMs = rememberInterpolatedProgress(playback)
-    val durationMs = max(playback?.durationMs ?: 0L, 1L)
-    val progressFraction by animateFloatAsState(
-        targetValue = (progressMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f),
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "playback-progress",
-    )
-
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        LinearProgressIndicator(
-            progress = { progressFraction },
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(99.dp)),
-            color = Color.White.copy(alpha = 0.96f),
-            trackColor = Color.White.copy(alpha = 0.18f),
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+                .size(52.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = formatDuration(progressMs),
-                color = Color.White.copy(alpha = 0.78f),
-                style = MaterialTheme.typography.labelMedium,
-            )
-            Text(
-                text = formatDuration(playback?.durationMs ?: 0L),
-                color = Color.White.copy(alpha = 0.52f),
-                style = MaterialTheme.typography.labelMedium,
+                text = "S",
+                color = Color.White.copy(alpha = 0.6f),
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
             )
         }
     }
 }
 
-@Composable
-private fun ControlDeck(
-    playback: PlaybackSnapshot?,
-    isCurrentItemSaved: Boolean,
-    transportEnabled: Boolean,
-    saveEnabled: Boolean,
-    utilityEnabled: Boolean,
-    onSkipPrevious: () -> Unit,
-    onTogglePlayback: () -> Unit,
-    onSkipNext: () -> Unit,
-    onToggleSave: () -> Unit,
-    onToggleShuffle: () -> Unit,
-    onCycleRepeat: () -> Unit,
-    onVolumeDown: () -> Unit,
-    onVolumeUp: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = if (playback?.isPlaying == true) "Streaming" else "Paused",
-                color = Color.White,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                text = playback?.device?.name ?: "Waiting for active device",
-                color = Color.White.copy(alpha = 0.56f),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-
-        TransportRow(
-            isPlaying = playback?.isPlaying == true,
-            enabled = transportEnabled,
-            onSkipPrevious = onSkipPrevious,
-            onTogglePlayback = onTogglePlayback,
-            onSkipNext = onSkipNext,
-        )
-
-        UtilityTray(
-            playback = playback,
-            isCurrentItemSaved = isCurrentItemSaved,
-            saveEnabled = saveEnabled,
-            utilityEnabled = utilityEnabled,
-            onToggleSave = onToggleSave,
-            onToggleShuffle = onToggleShuffle,
-            onCycleRepeat = onCycleRepeat,
-            onVolumeDown = onVolumeDown,
-            onVolumeUp = onVolumeUp,
-        )
-    }
-}
+/* ── Transport controls ────────────────────────────────────────────── */
 
 @Composable
 private fun TransportRow(
@@ -720,37 +530,47 @@ private fun TransportRow(
     onSkipNext: () -> Unit,
 ) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SecondaryControlButton(
+        TouchFeedbackButton(
             onClick = onSkipPrevious,
             enabled = enabled,
             icon = Icons.Rounded.SkipPrevious,
             contentDescription = "Previous track",
+            iconSize = 52.dp,
             modifier = Modifier.size(72.dp),
         )
 
-        PrimaryTransportButton(
+        Spacer(modifier = Modifier.width(24.dp))
+
+        TouchFeedbackButton(
             onClick = onTogglePlayback,
             enabled = enabled,
             icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-            contentDescription = if (isPlaying) "Pause playback" else "Play playback",
-            modifier = Modifier.size(96.dp),
+            contentDescription = if (isPlaying) "Pause" else "Play",
+            iconSize = 64.dp,
+            modifier = Modifier.size(88.dp),
         )
 
-        SecondaryControlButton(
+        Spacer(modifier = Modifier.width(24.dp))
+
+        TouchFeedbackButton(
             onClick = onSkipNext,
             enabled = enabled,
             icon = Icons.Rounded.SkipNext,
             contentDescription = "Next track",
+            iconSize = 52.dp,
             modifier = Modifier.size(72.dp),
         )
     }
 }
 
+/* ── Utility row (shuffle, repeat, save) ───────────────────────────── */
+
 @Composable
-private fun UtilityTray(
+private fun UtilityRow(
     playback: PlaybackSnapshot?,
     isCurrentItemSaved: Boolean,
     saveEnabled: Boolean,
@@ -758,159 +578,211 @@ private fun UtilityTray(
     onToggleSave: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
-    onVolumeDown: () -> Unit,
-    onVolumeUp: () -> Unit,
 ) {
     val repeatMode = playback?.repeatMode ?: RepeatMode.Off
-    val volumeLabel = playback?.device?.volumePercent?.let { "$it%" } ?: "--"
 
-    Column(
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            SecondaryControlButton(
-                onClick = onToggleShuffle,
-                enabled = utilityEnabled && playback?.item != null,
-                icon = Icons.Rounded.Shuffle,
-                contentDescription = if (playback?.isShuffleEnabled == true) "Disable shuffle" else "Enable shuffle",
-                modifier = Modifier.size(50.dp),
-                active = playback?.isShuffleEnabled == true,
-            )
+        TouchFeedbackButton(
+            onClick = onToggleShuffle,
+            enabled = utilityEnabled && playback?.item != null,
+            icon = Icons.Rounded.Shuffle,
+            contentDescription = if (playback?.isShuffleEnabled == true) "Disable shuffle" else "Enable shuffle",
+            iconSize = 30.dp,
+            modifier = Modifier.size(52.dp),
+            activeColor = if (playback?.isShuffleEnabled == true) Color.White else Color.White.copy(alpha = 0.55f),
+        )
 
-            SecondaryControlButton(
-                onClick = onCycleRepeat,
-                enabled = utilityEnabled && playback?.item != null,
-                icon = if (repeatMode == RepeatMode.Track) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                contentDescription = when (repeatMode) {
-                    RepeatMode.Off -> "Enable repeat"
-                    RepeatMode.Context -> "Repeat playlist or album"
-                    RepeatMode.Track -> "Repeat current track"
+        Spacer(modifier = Modifier.width(32.dp))
+
+        TouchFeedbackButton(
+            onClick = onCycleRepeat,
+            enabled = utilityEnabled && playback?.item != null,
+            icon = if (repeatMode == RepeatMode.Track) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+            contentDescription = when (repeatMode) {
+                RepeatMode.Off -> "Enable repeat"
+                RepeatMode.Context -> "Repeat playlist or album"
+                RepeatMode.Track -> "Repeat current track"
+            },
+            iconSize = 30.dp,
+            modifier = Modifier.size(52.dp),
+            activeColor = if (repeatMode != RepeatMode.Off) Color.White else Color.White.copy(alpha = 0.55f),
+        )
+
+        Spacer(modifier = Modifier.width(32.dp))
+
+        TouchFeedbackButton(
+            onClick = onToggleSave,
+            enabled = saveEnabled,
+            icon = if (isCurrentItemSaved) Icons.Rounded.Check else Icons.Rounded.Add,
+            contentDescription = if (isCurrentItemSaved) "Remove from library" else "Save to library",
+            iconSize = 30.dp,
+            modifier = Modifier.size(52.dp),
+            activeColor = if (isCurrentItemSaved) SpotifyGreen else Color.White.copy(alpha = 0.55f),
+        )
+    }
+}
+
+/* ── Progress bar ──────────────────────────────────────────────────── */
+
+@Composable
+private fun ProgressSection(
+    playback: PlaybackSnapshot?,
+    onSeek: (Long) -> Unit,
+) {
+    val interpolatedMs = rememberInterpolatedProgress(playback)
+    val durationMs = max(playback?.durationMs ?: 0L, 1L)
+
+    /* Dragging state — while the user drags we show their position, not the live one */
+    var isDragging by remember { mutableStateOf(false) }
+    var dragFraction by remember { mutableFloatStateOf(0f) }
+
+    val displayFraction = if (isDragging) {
+        dragFraction
+    } else {
+        (interpolatedMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+    }
+    val displayMs = if (isDragging) {
+        (dragFraction * durationMs).toLong().coerceIn(0L, durationMs)
+    } else {
+        interpolatedMs
+    }
+    val remainingMs = max(durationMs - displayMs, 0L)
+
+    /* Track width in px for pointer math */
+    var trackWidthPx by remember { mutableFloatStateOf(1f) }
+
+    /* Thumb animation — grows when dragging */
+    val thumbSize by animateDpAsState(
+        targetValue = if (isDragging) 14.dp else 0.dp,
+        animationSpec = tween(durationMillis = 150),
+        label = "thumb-size",
+    )
+    val trackHeight by animateDpAsState(
+        targetValue = if (isDragging) 5.dp else 4.dp,
+        animationSpec = tween(durationMillis = 150),
+        label = "track-height",
+    )
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        /* Custom seek bar */
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(24.dp) /* generous touch target */
+                .onSizeChanged { trackWidthPx = it.width.toFloat().coerceAtLeast(1f) }
+                .pointerInput(durationMs) {
+                    detectTapGestures { offset ->
+                        val fraction = (offset.x / trackWidthPx).coerceIn(0f, 1f)
+                        val seekMs = (fraction * durationMs).toLong()
+                        onSeek(seekMs)
+                    }
+                }
+                .pointerInput(durationMs) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { offset ->
+                            isDragging = true
+                            dragFraction = (offset.x / trackWidthPx).coerceIn(0f, 1f)
+                        },
+                        onDragEnd = {
+                            val seekMs = (dragFraction * durationMs).toLong().coerceIn(0L, durationMs)
+                            onSeek(seekMs)
+                            isDragging = false
+                        },
+                        onDragCancel = {
+                            isDragging = false
+                        },
+                        onHorizontalDrag = { _, dragAmount ->
+                            dragFraction = (dragFraction + dragAmount / trackWidthPx).coerceIn(0f, 1f)
+                        },
+                    )
                 },
-                modifier = Modifier.size(50.dp),
-                active = repeatMode != RepeatMode.Off,
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            /* Track background */
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(trackHeight)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(Color.White.copy(alpha = 0.16f)),
             )
 
-            SecondaryControlButton(
-                onClick = onToggleSave,
-                enabled = saveEnabled,
-                icon = if (isCurrentItemSaved) Icons.Rounded.Check else Icons.Rounded.Add,
-                contentDescription = if (isCurrentItemSaved) "Remove from library" else "Save to library",
-                modifier = Modifier.size(50.dp),
-                active = isCurrentItemSaved,
-                iconTint = if (isCurrentItemSaved) SpotifyGreen else Color.White,
+            /* Track filled */
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction = displayFraction)
+                    .height(trackHeight)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(Color.White.copy(alpha = 0.90f)),
             )
+
+            /* Thumb — only visible when dragging / hovering */
+            if (thumbSize > 0.dp) {
+                val density = LocalDensity.current
+                val thumbOffsetX = with(density) {
+                    (displayFraction * trackWidthPx).roundToInt() - (thumbSize / 2).roundToPx()
+                }
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(thumbOffsetX, 0) }
+                        .size(thumbSize)
+                        .shadow(4.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(Color.White),
+                )
+            }
         }
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SecondaryControlButton(
-                onClick = onVolumeDown,
-                enabled = utilityEnabled && playback?.device?.volumePercent != null,
-                icon = Icons.AutoMirrored.Rounded.VolumeDown,
-                contentDescription = "Lower volume",
-                modifier = Modifier.size(46.dp),
+            Text(
+                text = formatDuration(displayMs),
+                color = Color.White.copy(alpha = 0.70f),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Medium,
+                ),
             )
-
-            UtilityChip(label = volumeLabel)
-
-            SecondaryControlButton(
-                onClick = onVolumeUp,
-                enabled = utilityEnabled && playback?.device?.volumePercent != null,
-                icon = Icons.AutoMirrored.Rounded.VolumeUp,
-                contentDescription = "Raise volume",
-                modifier = Modifier.size(46.dp),
+            Text(
+                text = "-${formatDuration(remainingMs)}",
+                color = Color.White.copy(alpha = 0.45f),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Medium,
+                ),
             )
         }
     }
 }
 
-@Composable
-private fun PrimaryTransportButton(
-    onClick: () -> Unit,
-    enabled: Boolean,
-    icon: ImageVector,
-    contentDescription: String,
-    modifier: Modifier = Modifier,
-) {
-    SurfaceButton(
-        onClick = onClick,
-        enabled = enabled,
-        icon = icon,
-        contentDescription = contentDescription,
-        modifier = modifier,
-        shape = CircleShape,
-        active = true,
-        primary = true,
-        iconTint = Color.White,
-    )
-}
+/* ── iOS-style touch feedback button ───────────────────────────────── */
 
 @Composable
-private fun SecondaryControlButton(
+private fun TouchFeedbackButton(
     onClick: () -> Unit,
     enabled: Boolean,
     icon: ImageVector,
     contentDescription: String,
+    iconSize: Dp,
     modifier: Modifier = Modifier,
-    active: Boolean = false,
-    iconTint: Color = Color.White,
-    content: (@Composable () -> Unit)? = null,
-) {
-    SurfaceButton(
-        onClick = onClick,
-        enabled = enabled,
-        icon = icon,
-        contentDescription = contentDescription,
-        modifier = modifier,
-        shape = SecondaryButtonShape,
-        active = active,
-        primary = false,
-        iconTint = iconTint,
-        content = content,
-    )
-}
-
-@Composable
-private fun SurfaceButton(
-    onClick: () -> Unit,
-    enabled: Boolean,
-    icon: ImageVector,
-    contentDescription: String,
-    modifier: Modifier,
-    shape: androidx.compose.ui.graphics.Shape,
-    active: Boolean,
-    primary: Boolean,
-    iconTint: Color,
-    content: (@Composable () -> Unit)? = null,
+    activeColor: Color = Color.White,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed && enabled) 0.97f else 1f,
-        animationSpec = tween(durationMillis = 120),
-        label = "surface-button-scale",
+    val pressAlpha by animateFloatAsState(
+        targetValue = if (isPressed && enabled) 1f else 0f,
+        animationSpec = tween(durationMillis = if (isPressed) 60 else 200),
+        label = "press-circle-alpha",
     )
-
-    val fill = when {
-        primary -> ButtonPrimarySurface
-        active -> ButtonActiveSurface
-        isPressed && enabled -> ButtonSurfacePressed
-        else -> ButtonSurface
-    }
-    val border = when {
-        primary || active -> ButtonActiveBorder
-        else -> ButtonBorder
-    }
 
     Box(
         modifier = modifier
-            .shadow(18.dp, shape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
-            .clip(shape)
-            .background(fill)
-            .border(1.dp, border, shape)
+            .clip(CircleShape)
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,
@@ -918,83 +790,30 @@ private fun SurfaceButton(
                 onClick = onClick,
             )
             .drawBehind {
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color.White.copy(alpha = if (primary) 0.14f else 0.08f),
-                            Color.Transparent,
-                        ),
-                        center = Offset(size.width * 0.34f, size.height * 0.26f),
-                        radius = size.maxDimension * 0.76f,
-                    ),
-                    radius = size.maxDimension * 0.76f,
-                    center = Offset(size.width * 0.34f, size.height * 0.26f),
-                )
-            }
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                if (pressAlpha > 0f) {
+                    drawCircle(
+                        color = PressCircleColor.copy(alpha = PressCircleColor.alpha * pressAlpha),
+                        radius = size.minDimension / 2f,
+                    )
+                    drawCircle(
+                        color = Color.White.copy(alpha = 0.18f * pressAlpha),
+                        radius = size.minDimension / 2f,
+                        style = Stroke(width = 1.5f),
+                    )
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
-        if (content != null) {
-            content()
-        } else {
-            Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
-                modifier = Modifier.size(if (primary) 46.dp else 32.dp),
-                tint = if (enabled) iconTint else iconTint.copy(alpha = 0.42f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun UtilityChip(label: String) {
-    Box(
-        modifier = Modifier
-            .clip(UtilityChipShape)
-            .background(Color(0x2215191F))
-            .border(1.dp, Color.White.copy(alpha = 0.10f), UtilityChipShape)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            color = Color.White.copy(alpha = 0.84f),
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp,
-            ),
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            modifier = Modifier.size(iconSize),
+            tint = if (enabled) activeColor else activeColor.copy(alpha = 0.30f),
         )
     }
 }
 
-@Composable
-private fun ToggleChip(
-    label: String,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .clip(UtilityChipShape)
-            .background(Color(0x2A15191F))
-            .border(1.dp, Color.White.copy(alpha = 0.14f), UtilityChipShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            color = Color.White.copy(alpha = 0.88f),
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.8.sp,
-            ),
-        )
-    }
-}
+/* ── Helpers ────────────────────────────────────────────────────────── */
 
 @Composable
 private fun rememberInterpolatedProgress(playback: PlaybackSnapshot?): Long {
@@ -1043,6 +862,8 @@ private fun formatDuration(durationMs: Long): String {
     val seconds = safeDuration % 60
     return "%d:%02d".format(minutes, seconds)
 }
+
+/* ── Previews ──────────────────────────────────────────────────────── */
 
 private data class NowPlayingPreviewState(
     val name: String,
@@ -1129,7 +950,7 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
     )
 }
 
-@Preview(name = "Now Playing - Wide", widthDp = 960, heightDp = 480, showBackground = true, backgroundColor = 0xFF090B10)
+@Preview(name = "Now Playing - Wide", widthDp = 900, heightDp = 500, showBackground = true, backgroundColor = 0xFF090B10)
 @Composable
 private fun NowPlayingWidePreview(
     @PreviewParameter(NowPlayingPreviewStateProvider::class) preview: NowPlayingPreviewState,
@@ -1145,8 +966,7 @@ private fun NowPlayingWidePreview(
             onToggleSave = {},
             onToggleShuffle = {},
             onCycleRepeat = {},
-            onVolumeDown = {},
-            onVolumeUp = {},
+            onSeek = {},
         )
     }
 }

@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -27,9 +28,28 @@ import kotlinx.coroutines.isActive
 fun AlbumBackdropHost(
     artworkUrl: String?,
     artworkKey: String?,
-    blurEnabled: Boolean = true,
+    blurPassCount: Int = 8,
     modifier: Modifier = Modifier,
 ) {
+    val isInspecting = LocalInspectionMode.current
+
+    if (isInspecting) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF11141A),
+                            Color(0xFF0A0D11),
+                            Color(0xFF050608),
+                        ),
+                    ),
+                ),
+        )
+        return
+    }
+
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
@@ -82,9 +102,9 @@ fun AlbumBackdropHost(
         controller.setArtwork(artworkUrl = artworkUrl, artworkKey = artworkKey)
     }
 
-    LaunchedEffect(glSurfaceView, blurEnabled) {
+    LaunchedEffect(glSurfaceView, blurPassCount) {
         glSurfaceView?.queueEvent {
-            renderer.setBlurEnabled(blurEnabled)
+            renderer.setBlurPassCount(blurPassCount)
         }
     }
 

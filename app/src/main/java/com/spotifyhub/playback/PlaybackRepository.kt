@@ -153,6 +153,12 @@ class PlaybackRepository(
         }
     }
 
+    fun seekTo(positionMs: Long) {
+        appScope.launch {
+            executeCommand(command = { playerApi.seekTo(positionMs = positionMs) })
+        }
+    }
+
     fun adjustVolume(deltaPercent: Int) {
         appScope.launch {
             val currentVolume = _playbackState.value?.device?.volumePercent ?: return@launch

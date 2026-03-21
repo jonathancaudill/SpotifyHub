@@ -28,6 +28,10 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
+        appGraph.inputRouter.setVolumeHandler { delta ->
+            playerViewModel.adjustVolume(deltaPercent = delta)
+        }
+
         setContent {
             SpotifyHubTheme {
                 RootScreen(

@@ -31,14 +31,12 @@ class AlbumBackdropRenderer(
         const val OFFSCREEN_SCALE = 0.50f
         const val SATURATION = 2.0f
 
-        // Matches aadishv's polished LyricsScene.ts stacked Kawase approach:
-        //   KawaseBlurFilter(5, 1)   → 1 pass,  offset 5
-        //   KawaseBlurFilter(10, 1)  → 1 pass,  offset 10
-        //   KawaseBlurFilter(20, 2)  → 2 passes, offsets 20, 10
-        //   KawaseBlurFilter(40, 2)  → 2 passes, offsets 40, 20
-        //   KawaseBlurFilter(80, 2)  → 2 passes, offsets 80, 40
-        // Total: 8 passes, progressive doubling for massive blur radius.
-        val KAWASE_OFFSETS = floatArrayOf(5f, 10f, 20f, 10f, 40f, 20f, 80f, 40f)
+        // Stacked Kawase blur with coprime-ish offsets to prevent grid
+        // artifacts from aligning across passes. The 9-tap kernel (diagonal +
+        // cardinal) in the shader eliminates per-pass compound-eye artifacts,
+        // and these non-power-of-2 offsets ensure residual patterns from
+        // different passes destructively interfere.
+        val KAWASE_OFFSETS = floatArrayOf(5f, 11f, 19f, 13f, 37f, 23f, 71f, 43f)
     }
 
     private val quadVertices: FloatBuffer = ByteBuffer
@@ -96,7 +94,7 @@ class AlbumBackdropRenderer(
     private var transitionDurationMs = 450L
     private var shouldAnimateTransition = false
     @Volatile
-    private var blurEnabled = true
+    private var blurPassCount = KAWASE_OFFSETS.size
     private val startTimeMs = SystemClock.elapsedRealtime()
     private var pendingState: BackdropTransitionState? = null
 
@@ -168,7 +166,9 @@ class AlbumBackdropRenderer(
             1f
         }
 
-        if (blurEnabled) {
+        val passCount = blurPassCount.coerceIn(0, KAWASE_OFFSETS.size)
+
+        if (passCount > 0) {
             // Pass 1: render scene to FBO 0
             renderScene(
                 outputFramebuffer = framebufferIds[0],
@@ -178,8 +178,8 @@ class AlbumBackdropRenderer(
             )
 
             // Stacked Kawase blur passes, ping-ponging between FBOs.
-            for (i in KAWASE_OFFSETS.indices) {
-                val isLastPass = i == KAWASE_OFFSETS.lastIndex
+            for (i in 0 until passCount) {
+                val isLastPass = i == passCount - 1
                 val inputTexture = framebufferTextureIds[i % 2]
                 val outputFbo = if (isLastPass) 0 else framebufferIds[(i + 1) % 2]
                 val outputWidth = if (isLastPass) viewportWidth else offscreenWidth
@@ -213,9 +213,11 @@ class AlbumBackdropRenderer(
         applyTransitionState(state)
     }
 
-    internal fun setBlurEnabled(enabled: Boolean) {
-        blurEnabled = enabled
+    internal fun setBlurPassCount(count: Int) {
+        blurPassCount = count.coerceIn(0, KAWASE_OFFSETS.size)
     }
+
+    internal val maxBlurPasses: Int get() = KAWASE_OFFSETS.size
 
     private fun applyTransitionState(state: BackdropTransitionState) {
         uploadBitmap(sourceTextureIds[0], state.current.bitmap)

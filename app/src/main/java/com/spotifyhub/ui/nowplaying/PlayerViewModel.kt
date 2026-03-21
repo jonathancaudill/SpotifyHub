@@ -72,4 +72,8 @@ class PlayerViewModel(
     fun adjustVolume(deltaPercent: Int) {
         playbackRepository.adjustVolume(deltaPercent)
     }
+
+    fun seekTo(positionMs: Long) {
+        playbackRepository.seekTo(positionMs)
+    }
 }

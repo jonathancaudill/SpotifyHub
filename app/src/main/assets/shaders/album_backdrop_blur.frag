@@ -8,19 +8,30 @@ uniform float uSaturation;     // 1.0 = no change, >1 = boost (applied on final 
 
 varying vec2 vTexCoord;
 
-// Kawase blur: samples center + four diagonal neighbors.
-// Stacking multiple passes with progressively larger offsets
-// (5, 10, 20, 40, 80) achieves a very heavy blur efficiently.
+// Kawase blur: samples center + four diagonal + four cardinal neighbors.
+// The cardinal samples break the grid/compound-eye artifact that the
+// diagonal-only kernel produces at large offsets.
+// Stacking multiple passes with coprime offsets achieves a very heavy
+// blur without grid alignment across passes.
 void main() {
     float off = uKawaseOffset + 0.5;
     vec2 ts = uTexelSize;
 
     vec3 color = texture2D(uTexture, vTexCoord).rgb;
+
+    // Diagonal samples
     color += texture2D(uTexture, vTexCoord + vec2(-off, -off) * ts).rgb;
     color += texture2D(uTexture, vTexCoord + vec2( off, -off) * ts).rgb;
     color += texture2D(uTexture, vTexCoord + vec2(-off,  off) * ts).rgb;
     color += texture2D(uTexture, vTexCoord + vec2( off,  off) * ts).rgb;
-    color /= 5.0;
+
+    // Cardinal samples (breaks grid pattern)
+    color += texture2D(uTexture, vTexCoord + vec2(   0, -off) * ts).rgb;
+    color += texture2D(uTexture, vTexCoord + vec2(   0,  off) * ts).rgb;
+    color += texture2D(uTexture, vTexCoord + vec2(-off,    0) * ts).rgb;
+    color += texture2D(uTexture, vTexCoord + vec2( off,    0) * ts).rgb;
+
+    color /= 9.0;
 
     // Saturation boost (only on the final pass)
     if (uSaturation > 1.01) {

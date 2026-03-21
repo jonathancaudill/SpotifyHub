@@ -38,4 +38,9 @@ interface SpotifyPlayerApi {
     suspend fun setVolume(
         @Query("volume_percent") volumePercent: Int,
     )
+
+    @PUT("v1/me/player/seek")
+    suspend fun seekTo(
+        @Query("position_ms") positionMs: Long,
+    )
 }
