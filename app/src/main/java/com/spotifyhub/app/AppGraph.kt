@@ -4,11 +4,16 @@ import android.content.Context
 import com.spotifyhub.auth.EncryptedPrefsTokenStore
 import com.spotifyhub.auth.SpotifyAuthRepository
 import com.spotifyhub.auth.TokenStore
+import com.spotifyhub.browse.BrowseRepository
+import com.spotifyhub.library.LibraryRepository
 import com.spotifyhub.playback.PlaybackRepository
+import com.spotifyhub.search.SearchRepository
 import com.spotifyhub.spotify.api.SpotifyAccountsApi
+import com.spotifyhub.spotify.api.SpotifyBrowseApi
 import com.spotifyhub.spotify.api.SpotifyLibraryApi
 import com.spotifyhub.spotify.api.SpotifyNetworkModule
 import com.spotifyhub.spotify.api.SpotifyPlayerApi
+import com.spotifyhub.spotify.api.SpotifySearchApi
 import com.spotifyhub.system.input.InputRouter
 import com.spotifyhub.system.network.ConnectivityMonitor
 import com.squareup.moshi.Moshi
@@ -56,12 +61,41 @@ class AppGraph(private val appContext: Context) {
         )
     }
 
+    val browseApi: SpotifyBrowseApi by lazy {
+        SpotifyNetworkModule.createBrowseApi(
+            moshi = moshi,
+            authRepository = authRepository,
+        )
+    }
+
+    val searchApi: SpotifySearchApi by lazy {
+        SpotifyNetworkModule.createSearchApi(
+            moshi = moshi,
+            authRepository = authRepository,
+        )
+    }
+
     val playbackRepository: PlaybackRepository by lazy {
         PlaybackRepository(
             appScope = applicationScope,
             authRepository = authRepository,
             playerApi = playerApi,
             libraryApi = libraryApi,
+        )
+    }
+
+    val browseRepository: BrowseRepository by lazy {
+        BrowseRepository(browseApi = browseApi)
+    }
+
+    val searchRepository: SearchRepository by lazy {
+        SearchRepository(searchApi = searchApi)
+    }
+
+    val libraryRepository: LibraryRepository by lazy {
+        LibraryRepository(
+            libraryApi = libraryApi,
+            playerApi = playerApi,
         )
     }
 

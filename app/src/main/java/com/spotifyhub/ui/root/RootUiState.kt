@@ -4,7 +4,7 @@ import com.spotifyhub.auth.SessionState
 
 enum class RootDestination {
     Auth,
-    NowPlaying,
+    Main,
 }
 
 data class RootUiState(

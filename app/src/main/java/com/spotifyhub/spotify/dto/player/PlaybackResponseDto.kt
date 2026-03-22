@@ -20,13 +20,13 @@ data class TrackDto(
     @param:Json(name = "duration_ms") val durationMs: Long?,
     val uri: String?,
     val album: AlbumDto?,
-    val artists: List<ArtistDto> = emptyList(),
+    val artists: List<ArtistDto>? = null,
 )
 
 @JsonClass(generateAdapter = true)
 data class AlbumDto(
     val name: String?,
-    val images: List<ImageDto> = emptyList(),
+    val images: List<ImageDto>? = null,
 )
 
 @JsonClass(generateAdapter = true)

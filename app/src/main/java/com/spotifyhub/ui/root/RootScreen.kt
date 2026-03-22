@@ -4,14 +4,24 @@ import androidx.compose.runtime.Composable
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.spotifyhub.ui.auth.AuthScreen
 import com.spotifyhub.ui.auth.AuthViewModel
-import com.spotifyhub.ui.nowplaying.NowPlayingScreen
+import com.spotifyhub.ui.detail.DetailViewModel
+import com.spotifyhub.ui.home.HomeViewModel
+import com.spotifyhub.ui.library.LibraryViewModel
+import com.spotifyhub.ui.main.MainScreen
+import com.spotifyhub.ui.main.MainViewModel
 import com.spotifyhub.ui.nowplaying.PlayerViewModel
+import com.spotifyhub.ui.search.SearchViewModel
 
 @Composable
 fun RootScreen(
     rootViewModel: RootViewModel,
     authViewModel: AuthViewModel,
     playerViewModel: PlayerViewModel,
+    mainViewModel: MainViewModel,
+    homeViewModel: HomeViewModel,
+    searchViewModel: SearchViewModel,
+    libraryViewModel: LibraryViewModel,
+    detailViewModel: DetailViewModel,
 ) {
     val rootState = rootViewModel.uiState.collectAsStateWithLifecycle().value
 
@@ -21,10 +31,14 @@ fun RootScreen(
             isOffline = rootState.isOffline,
         )
 
-        RootDestination.NowPlaying -> NowPlayingScreen(
-            viewModel = playerViewModel,
+        RootDestination.Main -> MainScreen(
+            mainViewModel = mainViewModel,
+            playerViewModel = playerViewModel,
+            homeViewModel = homeViewModel,
+            searchViewModel = searchViewModel,
+            libraryViewModel = libraryViewModel,
+            detailViewModel = detailViewModel,
             isOffline = rootState.isOffline,
         )
     }
 }
-

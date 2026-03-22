@@ -21,7 +21,7 @@ class RootViewModel(
         RootUiState(
             sessionState = sessionState,
             destination = if (sessionState is SessionState.Ready) {
-                RootDestination.NowPlaying
+                RootDestination.Main
             } else {
                 RootDestination.Auth
             },

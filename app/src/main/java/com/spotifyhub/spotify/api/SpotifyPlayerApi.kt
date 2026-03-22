@@ -1,6 +1,7 @@
 package com.spotifyhub.spotify.api
 
 import com.spotifyhub.spotify.dto.player.PlaybackResponseDto
+import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -42,5 +43,10 @@ interface SpotifyPlayerApi {
     @PUT("v1/me/player/seek")
     suspend fun seekTo(
         @Query("position_ms") positionMs: Long,
+    )
+
+    @PUT("v1/me/player/play")
+    suspend fun playContext(
+        @Body body: PlayContextBody,
     )
 }

@@ -1,10 +1,10 @@
 # Native Android Spotify Desk Controller Implementation Plan
 
-Validated against the Spotify and Android docs on 2026-03-15.
+Validated against the Spotify and Android docs on 2026-03-22.
 
 ## Implementation progress
 
-Status updated on 2026-03-15 after auth validation, landscape UI correction, real library save-toggle implementation, and the GL backdrop / neutral-chrome rewrite.
+Status updated on 2026-03-22 after Home/Search/Library tab implementation and full sidebar navigation.
 
 ### Completed in repo
 
@@ -54,14 +54,58 @@ Status updated on 2026-03-15 after auth validation, landscape UI correction, rea
   - repeat cycling uses `PUT /v1/me/player/repeat`
   - volume adjustment uses `PUT /v1/me/player/volume`
   - the now-playing utility tray now exposes shuffle, repeat, save, and volume controls instead of a dead placeholder device button
+- Full multi-tab navigation implemented with sidebar rail:
+  - sidebar now hosts 4 interactive tab icons: Home, Search, Library, Now Playing
+  - clock and Spotify logo/LIVE status remain in the sidebar
+  - waveform-style icon for Now Playing tab, standard Material icons for others
+  - `MainScreen` composable wraps sidebar + content area with `Crossfade` transitions
+  - `RootDestination` updated from `{Auth, NowPlaying}` to `{Auth, Main}`
+  - `NowPlayingContent` composable extracted for embedding without redundant sidebar
+- Home screen implemented with 7 sections:
+  - time-aware greeting header with user display name from `GET /v1/me`
+  - quick-access 2×3 compact grid of recently played unique contexts
+  - "Made for You" section: user playlists filtered for Spotify-generated personalized playlists (Discover Weekly, Release Radar, Daily Mix, On Repeat, daylist, etc.)
+  - "Recently Played" horizontal card row from `GET /v1/me/player/recently-played`
+  - "Your Top Artists" circular artist bubbles from `GET /v1/me/top/artists`
+  - "Recommended for You" seeded from top artists + tracks via `GET /v1/recommendations`
+  - "Featured Playlists" from `GET /v1/browse/featured-playlists` (graceful degradation)
+  - all API calls run in parallel with 5-minute cache
+- Search screen implemented:
+  - search bar with debounced input (300ms) via Kotlin Flow
+  - results grouped by type: Songs, Artists, Albums, Playlists
+  - search uses `GET /v1/search` with limit 10 per type (Feb 2026 API change)
+  - each result row: artwork + title + type badge + subtitle
+- Library screen implemented:
+  - category chips: Playlists, Albums, Liked Songs
+  - paginated scrolling lists from `GET /v1/me/playlists`, `/me/albums`, `/me/tracks`
+  - infinite scroll loads more when near bottom
+  - items show artwork, name, type, subtitle, track count, chevron
+- Detail screen (playlist/album) implemented:
+  - header with artwork, title, subtitle, gradient background
+  - "Shuffle Play" button (green)
+  - numbered track list with title, artist, duration
+  - tapping track starts context playback at offset via `PUT /v1/me/player/play` with `@Body`
+- New Spotify API interfaces added:
+  - `SpotifyBrowseApi` — recently played, top tracks/artists, user playlists, recommendations, featured playlists, user profile
+  - `SpotifySearchApi` — search across tracks/albums/artists/playlists
+  - `SpotifyLibraryApi` expanded with playlist/album/track listing and detail endpoints
+  - `SpotifyPlayerApi` expanded with `playContext(@Body)` for context playback
+- OAuth scopes updated: added `user-top-read`
+- Network module refactored: shared authenticated OkHttpClient factory extracted
+- DTOs, mappers, and domain models added for browse, search, and library
+- Manual DI expanded: `AppGraph` now registers browse/search/library APIs and repositories
+- `MainViewModelFactory` updated with all new ViewModels
 
 ### Intentionally not finished yet
 
 - Embedded WebView auth fallback is not implemented yet; the current code uses Custom Tabs first and generic browser intent second
 - Transfer playback and device switching remain pending
-- Browse overlays and a real device switcher UI are still pending
 - HID/encoder routing is only a stub
 - Device-owner lock-task provisioning code is still pending beyond manifest and receiver scaffolding
+- Detail screen does not yet extract dominant colors from artwork for gradient (uses static gray gradient)
+- Artist tap action is not yet implemented (could launch artist radio or top tracks)
+- No pull-to-refresh gesture on Home screen yet (manual refresh via tab re-selection)
+- Library and search results don't yet navigate to a dedicated detail overlay (currently switches to NowPlaying tab)
 
 ### Build notes from implementation
 
@@ -90,7 +134,12 @@ Status updated on 2026-03-15 after auth validation, landscape UI correction, rea
   - an earlier incorrect body-based implementation compiled and read state correctly but failed to toggle library membership
 - The last pass already landed real shuffle/repeat/volume controls.
 - The background treatment has now moved away from palette extraction entirely and toward a shader-based artwork distortion field.
-- The next high-value UX work is device switching and browse overlays, not more structural panel layering.
+- Home, Search, Library, and Now Playing tabs are now all implemented. The next high-value UX work is:
+  - device switching overlay
+  - dynamic gradient extraction for detail screens (Palette or bitmap sampling)
+  - artist detail / artist radio functionality
+  - pull-to-refresh on Home
+  - dedicated detail overlay (instead of switching tabs)
 - Local toolchain context on this machine:
   - `JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home`
   - `ANDROID_SDK_ROOT=$HOME/Library/Android/sdk`

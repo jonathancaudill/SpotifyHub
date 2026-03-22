@@ -16,21 +16,30 @@ object SpotifyNetworkModule {
             .create(SpotifyAccountsApi::class.java)
     }
 
+    private fun createAuthenticatedClient(authRepository: SpotifyAuthRepository): OkHttpClient {
+        return OkHttpClient.Builder()
+            .addInterceptor(AuthHeaderInterceptor(authRepository))
+            .addInterceptor(RetryAfterInterceptor())
+            .authenticator(TokenRefreshAuthenticator(authRepository))
+            .build()
+    }
+
+    private fun createAuthenticatedRetrofit(
+        moshi: Moshi,
+        authRepository: SpotifyAuthRepository,
+    ): Retrofit {
+        return Retrofit.Builder()
+            .baseUrl("https://api.spotify.com/")
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .client(createAuthenticatedClient(authRepository))
+            .build()
+    }
+
     fun createPlayerApi(
         moshi: Moshi,
         authRepository: SpotifyAuthRepository,
     ): SpotifyPlayerApi {
-        return Retrofit.Builder()
-            .baseUrl("https://api.spotify.com/")
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .client(
-                OkHttpClient.Builder()
-                    .addInterceptor(AuthHeaderInterceptor(authRepository))
-                    .addInterceptor(RetryAfterInterceptor())
-                    .authenticator(TokenRefreshAuthenticator(authRepository))
-                    .build(),
-            )
-            .build()
+        return createAuthenticatedRetrofit(moshi, authRepository)
             .create(SpotifyPlayerApi::class.java)
     }
 
@@ -38,17 +47,23 @@ object SpotifyNetworkModule {
         moshi: Moshi,
         authRepository: SpotifyAuthRepository,
     ): SpotifyLibraryApi {
-        return Retrofit.Builder()
-            .baseUrl("https://api.spotify.com/")
-            .addConverterFactory(MoshiConverterFactory.create(moshi))
-            .client(
-                OkHttpClient.Builder()
-                    .addInterceptor(AuthHeaderInterceptor(authRepository))
-                    .addInterceptor(RetryAfterInterceptor())
-                    .authenticator(TokenRefreshAuthenticator(authRepository))
-                    .build(),
-            )
-            .build()
+        return createAuthenticatedRetrofit(moshi, authRepository)
             .create(SpotifyLibraryApi::class.java)
+    }
+
+    fun createBrowseApi(
+        moshi: Moshi,
+        authRepository: SpotifyAuthRepository,
+    ): SpotifyBrowseApi {
+        return createAuthenticatedRetrofit(moshi, authRepository)
+            .create(SpotifyBrowseApi::class.java)
+    }
+
+    fun createSearchApi(
+        moshi: Moshi,
+        authRepository: SpotifyAuthRepository,
+    ): SpotifySearchApi {
+        return createAuthenticatedRetrofit(moshi, authRepository)
+            .create(SpotifySearchApi::class.java)
     }
 }

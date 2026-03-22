@@ -180,6 +180,7 @@ class SpotifyAuthRepository(
                     "playlist-read-private",
                     "playlist-read-collaborative",
                     "user-read-recently-played",
+                    "user-top-read",
                 ).joinToString(" "),
             )
             .build()

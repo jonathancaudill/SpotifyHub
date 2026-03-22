@@ -28,7 +28,7 @@ object PlaybackMapper {
                 PlaybackItem(
                     id = it.id.orEmpty(),
                     title = it.name.orEmpty(),
-                    artist = it.artists.firstOrNull()?.name.orEmpty(),
+                    artist = it.artists.orEmpty().firstOrNull()?.name.orEmpty(),
                     album = it.album?.name.orEmpty(),
                     artworkUrl = it.album?.images?.firstOrNull()?.url,
                     uri = it.uri.orEmpty(),

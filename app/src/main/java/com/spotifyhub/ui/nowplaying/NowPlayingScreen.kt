@@ -105,7 +105,7 @@ private val SpotifyGreen = Color(0xFF1ED760)
 
 private val PressCircleColor = Color.White.copy(alpha = 0.14f)
 
-/* ── Public entry-point ────────────────────────────────────────────── */
+/* ── Public entry-point (standalone, legacy) ──────────────────────── */
 
 @Composable
 fun NowPlayingScreen(
@@ -125,6 +125,120 @@ fun NowPlayingScreen(
         onCycleRepeat = viewModel::cycleRepeatMode,
         onSeek = viewModel::seekTo,
     )
+}
+
+/* ── Embeddable content (no sidebar — used inside MainScreen) ─────── */
+
+@Composable
+fun NowPlayingContent(
+    viewModel: PlayerViewModel,
+    isOffline: Boolean,
+    renderBackdrop: Boolean = true,
+) {
+    val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
+    val playback = uiState.playback
+    val maxPasses = 8
+    var blurPassCount by rememberSaveable { mutableStateOf(maxPasses) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Transparent),
+    ) {
+        if (renderBackdrop) {
+            /* Dynamic album-art backdrop */
+            AlbumBackdropHost(
+                artworkUrl = playback?.item?.artworkUrl,
+                artworkKey = playback?.item?.id,
+                blurPassCount = blurPassCount,
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            /* Subtle gradient overlay */
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(0x2808090C),
+                                Color(0x10090A0C),
+                                Color(0x32060709),
+                            ),
+                        ),
+                    ),
+            )
+
+            /* Debug: blur pass stepper */
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(enabled = blurPassCount > 0) {
+                            blurPassCount = (blurPassCount - 1).coerceAtLeast(0)
+                        }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = "\u2212",
+                        color = if (blurPassCount > 0) Color.White else Color.White.copy(alpha = 0.3f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Text(
+                    text = "BLUR $blurPassCount/$maxPasses",
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(enabled = blurPassCount < maxPasses) {
+                            blurPassCount = (blurPassCount + 1).coerceAtMost(maxPasses)
+                        }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    Text(
+                        text = "+",
+                        color = if (blurPassCount < maxPasses) Color.White else Color.White.copy(alpha = 0.3f),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+        }
+
+        /* Content — no sidebar, just the main area */
+        MainContent(
+            playback = playback,
+            isBusy = uiState.isRefreshing,
+            isCurrentItemSaved = uiState.isCurrentItemSaved == true,
+            transportEnabled = playback?.item != null && !uiState.isSendingCommand,
+            saveEnabled = playback?.item != null && !uiState.isSendingCommand,
+            utilityEnabled = playback?.device != null && !uiState.isSendingCommand,
+            onSkipPrevious = viewModel::skipPrevious,
+            onTogglePlayback = viewModel::togglePlayback,
+            onSkipNext = viewModel::skipNext,
+            onToggleSave = viewModel::toggleSaveCurrentItem,
+            onToggleShuffle = viewModel::toggleShuffle,
+            onCycleRepeat = viewModel::cycleRepeatMode,
+            onSeek = viewModel::seekTo,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+        )
+    }
 }
 
 /* ── Root layout ───────────────────────────────────────────────────── */
