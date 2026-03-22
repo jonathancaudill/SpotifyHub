@@ -1,0 +1,98 @@
+name: Build APKs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Debug & Release APKs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      # SF Pro fonts are Apple-proprietary and gitignored (59 MB).
+      # They live as a zip release asset on a separate private repo:
+      #   github.com/jonathancaudill/spotifyhub-ci-assets
+      #
+      # The CI_ASSETS_PAT secret needs `repo` scope (or fine-grained
+      # `contents: read` on that repo) to download from it.
+      #
+      # If the secret is missing or the download fails, the build
+      # falls back to Inter (OFL-licensed, metrically similar).
+      - name: Restore fonts
+        env:
+          GH_TOKEN: ${{ secrets.CI_ASSETS_PAT }}
+        run: |
+          FONT_DIR=app/src/main/res/font
+          mkdir -p "$FONT_DIR"
+
+          if [ -n "$GH_TOKEN" ] && gh release download fonts \
+            --repo jonathancaudill/spotifyhub-ci-assets \
+            --pattern "sf-pro-fonts.zip" \
+            --dir /tmp 2>/dev/null; then
+            unzip -o /tmp/sf-pro-fonts.zip -d "$FONT_DIR"
+            echo "Restored SF Pro fonts from private assets repo."
+          else
+            echo "Font download failed or CI_ASSETS_PAT not set — falling back to Inter."
+
+            INTER_VERSION="4.1"
+            curl -fsSL "https://github.com/rsms/inter/releases/download/v${INTER_VERSION}/Inter-${INTER_VERSION}.zip" -o /tmp/inter.zip
+            unzip -q /tmp/inter.zip -d /tmp/inter
+            STATIC_DIR="/tmp/inter/Inter-${INTER_VERSION}/extras/ttf"
+
+            declare -A WEIGHT_MAP=(
+              ["light"]="Inter-Light.ttf"
+              ["regular"]="Inter-Regular.ttf"
+              ["medium"]="Inter-Medium.ttf"
+              ["semibold"]="Inter-SemiBold.ttf"
+              ["bold"]="Inter-Bold.ttf"
+            )
+
+            for weight in "${!WEIGHT_MAP[@]}"; do
+              src="${STATIC_DIR}/${WEIGHT_MAP[$weight]}"
+              cp "$src" "$FONT_DIR/sf_pro_text_${weight}.otf"
+              cp "$src" "$FONT_DIR/sf_pro_display_${weight}.otf"
+            done
+          fi
+
+          ls -la "$FONT_DIR"
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug -PSPOTIFY_CLIENT_ID="${{ secrets.SPOTIFY_CLIENT_ID }}"
+
+      - name: Build release APK
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: ./gradlew assembleRelease -PSPOTIFY_CLIENT_ID="${{ secrets.SPOTIFY_CLIENT_ID }}"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotifyhub-debug
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+      - name: Upload release APK
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotifyhub-release
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
