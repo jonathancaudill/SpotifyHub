@@ -1,10 +1,13 @@
 # SpotifyHub
 
-A dedicated Android music controller for Spotify, designed to turn landscape displays (like the Echo Show) into a beautiful always-on playback dashboard. Built entirely with Jetpack Compose and Kotlin, it controls Spotify playback on connected devices through the Spotify Web API.
+A dedicated Android music controller for Spotify, designed to turn landscape displays (like the Echo Show) into a beautiful always-on playback dashboard. Built entirely with Jetpack Compose and Kotlin, it combines a persistent now-playing surface with Home, Search, and Library browsing backed by the Spotify Web API.
 
 ## Features
 
 - **Now Playing Dashboard** — Large album art, track metadata, and playback controls in a landscape-optimized layout
+- **Sidebar Navigation Shell** — Persistent glass rail with Home, Search, Library, and Now Playing tabs
+- **Browse + Library Views** — Home recommendations, search results, saved library lists, and playlist/album detail pages
+- **Swipe-Over Detail Pages** — Library and browse details stay scoped to their owning tab instead of replacing the global screen
 - **Shader-Driven Backdrop** — Real-time OpenGL ES 2.0 album art distortion with multi-pass Kawase blur, smooth crossfades between tracks
 - **Full Playback Control** — Play/pause, skip, shuffle, repeat, volume, seek (draggable progress bar), and library save/unsave
 - **Draggable Seek Bar** — Tap or drag to scrub through tracks with live time preview; seeks via the Spotify Web API
@@ -19,17 +22,17 @@ A dedicated Android music controller for Spotify, designed to turn landscape dis
 ```
 Spotify Web API
       │
-SpotifyPlayerApi / SpotifyLibraryApi        ← Retrofit interfaces
+SpotifyPlayerApi / SpotifyLibraryApi / SpotifyBrowseApi / SpotifySearchApi
       │
-PlaybackRepository                          ← Polls every 1.5s, dispatches commands
+PlaybackRepository / LibraryRepository / BrowseRepository / SearchRepository
       │
-PlayerViewModel                             ← Combines flows into PlayerUiState
+PlayerViewModel / LibraryViewModel / HomeViewModel / SearchViewModel / DetailViewModel
       │
-NowPlayingScreen                            ← Jetpack Compose UI
-  ├── AlbumBackdropHost (GLSurfaceView)     ← Shader-driven artwork blur
-  ├── Track metadata + transport controls
-  ├── Draggable progress/seek bar
-  └── Utility row (shuffle, repeat, save)
+MainScreen                                  ← Sidebar shell + tab container
+  ├── persistent AlbumBackdropHost          ← Always-mounted GLSurfaceView for warm shader transitions
+  ├── Home / Search / Library content pages
+  ├── tab-scoped swipe-over detail sheet
+  └── NowPlayingContent                     ← Track metadata, transport, seek, utility controls
 ```
 
 **Key patterns:**
@@ -44,9 +47,12 @@ NowPlayingScreen                            ← Jetpack Compose UI
 app/src/main/java/com/spotifyhub/
 ├── app/                  # Application shell, DI graph, ViewModelFactory
 ├── auth/                 # OAuth2 PKCE flow, loopback server, encrypted token store
+├── browse/               # Home/browse repository and models
+├── library/              # Library repository and models
 ├── playback/             # PlaybackRepository, domain models (PlaybackSnapshot, etc.)
+├── search/               # Search repository and models
 ├── spotify/
-│   ├── api/              # Retrofit interfaces (Player, Library, Accounts)
+│   ├── api/              # Retrofit interfaces (Player, Library, Browse, Search, Accounts)
 │   ├── dto/              # Moshi data transfer objects
 │   └── mapper/           # DTO → domain model mapping
 ├── system/
@@ -56,8 +62,15 @@ app/src/main/java/com/spotifyhub/
 ├── theme/                # Material 3 theme, SF Pro typography
 └── ui/
     ├── auth/             # Auth screen
-    └── nowplaying/       # Now Playing screen, PlayerViewModel
-        └── backdrop/     # OpenGL renderer, shaders, bitmap controller
+    ├── common/           # Shared UI utilities (overscroll, indicators)
+    ├── detail/           # Playlist/album detail sheet
+    ├── home/             # Home tab
+    ├── library/          # Library tab
+    ├── main/             # Main shell, sidebar, tab navigation
+    ├── nowplaying/       # Now Playing screen, PlayerViewModel
+    │   └── backdrop/     # OpenGL renderer, shaders, bitmap controller
+    ├── root/             # Root auth/main routing
+    └── search/           # Search tab
 
 app/src/main/assets/shaders/
 ├── album_backdrop.vert           # Vertex shader (pass-through quad)
@@ -123,6 +136,15 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | `GET` | `/v1/me/player` | Current playback state (polled every 1.5s) |
+| `GET` | `/v1/me/playlists` | User playlists for browse/library |
+| `GET` | `/v1/me/albums` | Saved albums |
+| `GET` | `/v1/me/tracks` | Saved tracks |
+| `GET` | `/v1/playlists/{id}` | Playlist detail |
+| `GET` | `/v1/playlists/{id}/items` | Playlist tracks |
+| `GET` | `/v1/albums/{id}/tracks` | Album tracks |
+| `GET` | `/v1/search` | Search across tracks, albums, artists, playlists |
+| `GET` | `/v1/me/player/recently-played` | Home tab recents |
+| `GET` | `/v1/browse/featured-playlists` | Home tab featured playlists |
 | `PUT` | `/v1/me/player/play` | Resume playback |
 | `PUT` | `/v1/me/player/pause` | Pause playback |
 | `POST` | `/v1/me/player/next` | Skip to next track |
@@ -169,7 +191,7 @@ The album art backdrop uses a multi-stage OpenGL ES 2.0 pipeline:
 2. **Blur passes** — 8 stacked Kawase blur passes with coprime offsets (`5, 11, 19, 13, 37, 23, 71, 43`) to avoid grid artifacts
 3. **Final composite** — Saturation boost + vignette fade on the last pass
 
-Artwork is downsampled to 512x512 and rendered to an offscreen framebuffer at 50% viewport resolution for performance. Smooth crossfades occur when tracks change.
+Artwork is downsampled to 512x512 and rendered to an offscreen framebuffer at 50% viewport resolution for performance. Smooth crossfades occur when tracks change, and the GLSurfaceView host remains mounted in the main shell so the shader stays warm when switching back to the Now Playing tab.
 
 ## Tech Stack
 
