@@ -10,6 +10,7 @@ import com.spotifyhub.ui.library.LibraryViewModel
 import com.spotifyhub.ui.main.MainScreen
 import com.spotifyhub.ui.main.MainViewModel
 import com.spotifyhub.ui.nowplaying.PlayerViewModel
+import com.spotifyhub.ui.rating.RatingViewModel
 import com.spotifyhub.ui.search.SearchViewModel
 
 @Composable
@@ -21,6 +22,7 @@ fun RootScreen(
     homeViewModel: HomeViewModel,
     searchViewModel: SearchViewModel,
     libraryViewModel: LibraryViewModel,
+    ratingViewModel: RatingViewModel,
     detailViewModel: DetailViewModel,
 ) {
     val rootState = rootViewModel.uiState.collectAsStateWithLifecycle().value
@@ -37,6 +39,7 @@ fun RootScreen(
             homeViewModel = homeViewModel,
             searchViewModel = searchViewModel,
             libraryViewModel = libraryViewModel,
+            ratingViewModel = ratingViewModel,
             detailViewModel = detailViewModel,
             isOffline = rootState.isOffline,
         )

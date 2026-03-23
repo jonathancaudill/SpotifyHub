@@ -27,6 +27,7 @@ data class TrackDto(
 data class AlbumDto(
     val name: String?,
     val images: List<ImageDto>? = null,
+    @param:Json(name = "release_date") val releaseDate: String? = null,
 )
 
 @JsonClass(generateAdapter = true)

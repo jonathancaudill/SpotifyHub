@@ -16,6 +16,9 @@ android {
 
         val spotifyClientId = providers.gradleProperty("SPOTIFY_CLIENT_ID").orElse("").get()
         buildConfigField("String", "SPOTIFY_CLIENT_ID", "\"$spotifyClientId\"")
+
+        val sheetsScriptUrl = providers.gradleProperty("SHEETS_SCRIPT_URL").orElse("").get()
+        buildConfigField("String", "SHEETS_SCRIPT_URL", "\"$sheetsScriptUrl\"")
     }
 
     buildTypes {

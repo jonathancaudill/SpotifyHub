@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -57,6 +58,8 @@ import com.spotifyhub.ui.library.LibraryViewModel
 import com.spotifyhub.ui.nowplaying.NowPlayingContent
 import com.spotifyhub.ui.nowplaying.PlayerViewModel
 import com.spotifyhub.ui.nowplaying.backdrop.AlbumBackdropHost
+import com.spotifyhub.ui.rating.RatingScreen
+import com.spotifyhub.ui.rating.RatingViewModel
 import com.spotifyhub.ui.search.SearchScreen
 import com.spotifyhub.ui.search.SearchViewModel
 import kotlinx.coroutines.delay
@@ -83,6 +86,7 @@ fun MainScreen(
     homeViewModel: HomeViewModel,
     searchViewModel: SearchViewModel,
     libraryViewModel: LibraryViewModel,
+    ratingViewModel: RatingViewModel,
     detailViewModel: DetailViewModel,
     isOffline: Boolean,
 ) {
@@ -197,6 +201,10 @@ fun MainScreen(
                                         currentTrackId = currentTrackId,
                                         isPlaybackActive = isPlaybackActive,
                                         onNavigateToDetail = { mainViewModel.openDetail() },
+                                    )
+
+                                    MainTab.Rate -> RatingScreen(
+                                        viewModel = ratingViewModel,
                                     )
 
                                     MainTab.NowPlaying -> NowPlayingContent(
@@ -360,6 +368,12 @@ private fun SidebarRail(
                     label = "Library",
                     isSelected = selectedTab == MainTab.Library,
                     onClick = { onTabSelected(MainTab.Library) },
+                )
+                TabIcon(
+                    icon = Icons.Rounded.Star,
+                    label = "Rate",
+                    isSelected = selectedTab == MainTab.Rate,
+                    onClick = { onTabSelected(MainTab.Rate) },
                 )
                 TabIcon(
                     icon = null,

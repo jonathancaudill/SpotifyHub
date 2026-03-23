@@ -5,8 +5,9 @@ A dedicated Android music controller for Spotify, designed to turn landscape dis
 ## Features
 
 - **Now Playing Dashboard** — Large album art, track metadata, and playback controls in a landscape-optimized layout
-- **Sidebar Navigation Shell** — Persistent glass rail with Home, Search, Library, and Now Playing tabs
+- **Sidebar Navigation Shell** — Persistent glass rail with Home, Search, Library, Rate, and Now Playing tabs
 - **Browse + Library Views** — Home recommendations, search results, saved library lists, and playlist/album detail pages
+- **Album Rating Tab** — Rate the currently playing album (0.0–10.0) with a touch-draggable scroll wheel. Ratings are submitted to a Google Sheet via Apps Script. Albums with existing ratings are automatically detected and locked
 - **Swipe-Over Detail Pages** — Library and browse details stay scoped to their owning tab instead of replacing the global screen
 - **Shader-Driven Backdrop** — Real-time OpenGL ES 2.0 album art distortion with multi-pass Kawase blur, smooth crossfades between tracks
 - **Full Playback Control** — Play/pause, skip, shuffle, repeat, volume, seek (draggable progress bar), and library save/unsave
@@ -24,13 +25,14 @@ Spotify Web API
       │
 SpotifyPlayerApi / SpotifyLibraryApi / SpotifyBrowseApi / SpotifySearchApi
       │
-PlaybackRepository / LibraryRepository / BrowseRepository / SearchRepository
+PlaybackRepository / LibraryRepository / BrowseRepository / SearchRepository / SheetsRepository
       │
-PlayerViewModel / LibraryViewModel / HomeViewModel / SearchViewModel / DetailViewModel
+PlayerViewModel / LibraryViewModel / HomeViewModel / SearchViewModel / DetailViewModel / RatingViewModel
       │
 MainScreen                                  ← Sidebar shell + tab container
   ├── persistent AlbumBackdropHost          ← Always-mounted GLSurfaceView for warm shader transitions
   ├── Home / Search / Library content pages
+  ├── RatingScreen                          ← Album rating with scroll wheel + Google Sheets sync
   ├── tab-scoped swipe-over detail sheet
   └── NowPlayingContent                     ← Track metadata, transport, seek, utility controls
 ```
@@ -50,6 +52,7 @@ app/src/main/java/com/spotifyhub/
 ├── browse/               # Home/browse repository and models
 ├── library/              # Library repository and models
 ├── playback/             # PlaybackRepository, domain models (PlaybackSnapshot, etc.)
+├── rating/               # SheetsRepository (Google Sheets integration via Apps Script)
 ├── search/               # Search repository and models
 ├── spotify/
 │   ├── api/              # Retrofit interfaces (Player, Library, Browse, Search, Accounts)
@@ -69,6 +72,7 @@ app/src/main/java/com/spotifyhub/
     ├── main/             # Main shell, sidebar, tab navigation
     ├── nowplaying/       # Now Playing screen, PlayerViewModel
     │   └── backdrop/     # OpenGL renderer, shaders, bitmap controller
+    ├── rating/           # Rating tab (scroll wheel, album info, submit)
     ├── root/             # Root auth/main routing
     └── search/           # Search tab
 
@@ -98,11 +102,21 @@ app/src/main/assets/shaders/
 
 ### Build Configuration
 
-Add your Spotify Client ID to your `gradle.properties` (project root or `~/.gradle/gradle.properties`):
+Add your Spotify Client ID and (optionally) your Google Sheets script URL to `~/.gradle/gradle.properties`:
 
 ```properties
 SPOTIFY_CLIENT_ID=your_client_id_here
+SHEETS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
 ```
+
+#### Google Sheets Rating Integration (optional)
+
+To enable the album rating tab:
+
+1. Open your Google Sheet → **Extensions → Apps Script**
+2. Paste the contents of `google-apps-script/Code.gs`
+3. **Deploy → New deployment → Web app** → Execute as "Me", Access "Anyone"
+4. Copy the deployment URL and set it as `SHEETS_SCRIPT_URL` in your Gradle properties
 
 ### Fonts
 

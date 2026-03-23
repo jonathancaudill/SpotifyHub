@@ -7,6 +7,7 @@ import com.spotifyhub.auth.TokenStore
 import com.spotifyhub.browse.BrowseRepository
 import com.spotifyhub.library.LibraryRepository
 import com.spotifyhub.playback.PlaybackRepository
+import com.spotifyhub.rating.SheetsRepository
 import com.spotifyhub.search.SearchRepository
 import com.spotifyhub.spotify.api.SpotifyAccountsApi
 import com.spotifyhub.spotify.api.SpotifyBrowseApi
@@ -90,6 +91,10 @@ class AppGraph(private val appContext: Context) {
 
     val searchRepository: SearchRepository by lazy {
         SearchRepository(searchApi = searchApi)
+    }
+
+    val sheetsRepository: SheetsRepository by lazy {
+        SheetsRepository()
     }
 
     val libraryRepository: LibraryRepository by lazy {

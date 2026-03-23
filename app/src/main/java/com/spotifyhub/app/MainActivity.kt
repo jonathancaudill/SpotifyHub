@@ -15,6 +15,7 @@ import com.spotifyhub.ui.home.HomeViewModel
 import com.spotifyhub.ui.library.LibraryViewModel
 import com.spotifyhub.ui.main.MainViewModel
 import com.spotifyhub.ui.nowplaying.PlayerViewModel
+import com.spotifyhub.ui.rating.RatingViewModel
 import com.spotifyhub.ui.root.RootScreen
 import com.spotifyhub.ui.root.RootViewModel
 import com.spotifyhub.ui.search.SearchViewModel
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
     private val homeViewModel: HomeViewModel by viewModels { viewModelFactory }
     private val searchViewModel: SearchViewModel by viewModels { viewModelFactory }
     private val libraryViewModel: LibraryViewModel by viewModels { viewModelFactory }
+    private val ratingViewModel: RatingViewModel by viewModels { viewModelFactory }
     private val detailViewModel: DetailViewModel by viewModels { viewModelFactory }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,6 +54,7 @@ class MainActivity : ComponentActivity() {
                     homeViewModel = homeViewModel,
                     searchViewModel = searchViewModel,
                     libraryViewModel = libraryViewModel,
+                    ratingViewModel = ratingViewModel,
                     detailViewModel = detailViewModel,
                 )
             }

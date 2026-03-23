@@ -8,6 +8,7 @@ import com.spotifyhub.ui.home.HomeViewModel
 import com.spotifyhub.ui.library.LibraryViewModel
 import com.spotifyhub.ui.main.MainViewModel
 import com.spotifyhub.ui.nowplaying.PlayerViewModel
+import com.spotifyhub.ui.rating.RatingViewModel
 import com.spotifyhub.ui.root.RootViewModel
 import com.spotifyhub.ui.search.SearchViewModel
 
@@ -46,6 +47,13 @@ class MainViewModelFactory(
 
             modelClass.isAssignableFrom(LibraryViewModel::class.java) -> {
                 LibraryViewModel(appGraph.libraryRepository) as T
+            }
+
+            modelClass.isAssignableFrom(RatingViewModel::class.java) -> {
+                RatingViewModel(
+                    playbackRepository = appGraph.playbackRepository,
+                    sheetsRepository = appGraph.sheetsRepository,
+                ) as T
             }
 
             modelClass.isAssignableFrom(DetailViewModel::class.java) -> {

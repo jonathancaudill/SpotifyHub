@@ -31,6 +31,7 @@ object PlaybackMapper {
                     artist = it.artists.orEmpty().firstOrNull()?.name.orEmpty(),
                     album = it.album?.name.orEmpty(),
                     artworkUrl = it.album?.images?.firstOrNull()?.url,
+                    releaseDate = it.album?.releaseDate,
                     uri = it.uri.orEmpty(),
                 )
             },

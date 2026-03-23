@@ -13,6 +13,7 @@ enum class MainTab {
     Home,
     Search,
     Library,
+    Rate,
     NowPlaying,
 }
 

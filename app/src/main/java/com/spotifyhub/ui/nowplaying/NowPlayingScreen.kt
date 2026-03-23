@@ -1005,6 +1005,7 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
                         artist = "The Weeknd, Daft Punk",
                         album = "Starboy",
                         artworkUrl = null,
+                        releaseDate = "2016-11-25",
                         uri = "spotify:track:preview-1",
                     ),
                     device = PlaybackDevice(
@@ -1036,6 +1037,7 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
                         artist = "The Weeknd",
                         album = "After Hours",
                         artworkUrl = null,
+                        releaseDate = "2020-03-20",
                         uri = "spotify:track:preview-2",
                     ),
                     device = PlaybackDevice(

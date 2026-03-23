@@ -17,6 +17,7 @@ data class PlaybackItem(
     val artist: String,
     val album: String,
     val artworkUrl: String?,
+    val releaseDate: String?,
     val uri: String,
 )
 
