@@ -249,7 +249,6 @@ private fun BrowseCard(
     Column(
         modifier = Modifier
             .width(120.dp)
-            .clip(CardShape)
             .clickable(onClick = onClick),
     ) {
         AsyncImage(

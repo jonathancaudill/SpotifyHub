@@ -75,7 +75,7 @@ private val BrowseBackdropStart = Color(0xFF132433)
 private val BrowseBackdropMid = Color(0xFF161A22)
 private val BrowseBackdropEnd = Color(0xFF101318)
 private val BrowseContentSurface = Color(0xFF171A1F)
-private val DetailSheetShape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp)
+private val DetailSheetShape = RoundedCornerShape(0.dp)
 
 /* ── Public entry-point ──────────────────────────────────────────── */
 
@@ -231,7 +231,6 @@ fun MainScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(start = 18.dp)
                                 .shadow(
                                     elevation = 28.dp,
                                     shape = DetailSheetShape,
