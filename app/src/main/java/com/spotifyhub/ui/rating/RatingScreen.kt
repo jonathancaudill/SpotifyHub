@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import sv.lib.squircleshape.SquircleShape
 import androidx.compose.material.icons.Icons
@@ -66,14 +67,15 @@ import kotlin.math.sin
 
 /* ── Design tokens ───────────────────────────────────────────────── */
 
-private val ArtworkShape = SquircleShape(18.dp)
-private val CardSurface = Color(0x2415181D)
-private val CardBorder = Color.White.copy(alpha = 0.08f)
-private val SurfaceShadow = Color.Black.copy(alpha = 0.20f)
+private val ArtworkShape = SquircleShape(12.dp)
+private val CardShape = SquircleShape(16.dp)
 private val SpotifyGreen = Color(0xFF1ED760)
 private val LockedGold = Color(0xFFD4A843)
+private val BrowseBackground = Color(0xFF171A1F)
 
-private val TrackColorInactive = Color.White.copy(alpha = 0.10f)
+private val CardBackground = Color.White.copy(alpha = 0.06f)
+private val CardBorder = Color.White.copy(alpha = 0.08f)
+private val TrackColorInactive = Color.White.copy(alpha = 0.08f)
 
 /* ── Public entry-point ──────────────────────────────────────────── */
 
@@ -86,15 +88,7 @@ fun RatingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        Color(0xFF132433),
-                        Color(0xFF161A22),
-                        Color(0xFF101318),
-                    ),
-                ),
-            ),
+            .background(BrowseBackground),
         contentAlignment = Alignment.Center,
     ) {
         if (uiState.currentItem == null) {
@@ -168,11 +162,11 @@ private fun RatingContent(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        /* Left column: album art + metadata + submit button */
+        /* Left column: album info card */
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -180,52 +174,57 @@ private fun RatingContent(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            /* Album info card */
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(CardShape)
+                    .background(CardBackground)
+                    .border(1.dp, CardBorder, CardShape)
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                /* Small album art */
+                /* Album art */
                 AlbumArtwork(
                     artworkUrl = item.artworkUrl,
                     title = item.album,
-                    modifier = Modifier.size(110.dp),
+                    modifier = Modifier.size(88.dp),
                 )
 
-                /* Metadata beside art */
+                /* Metadata */
                 Column(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Text(
                         text = item.artist,
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = Color.White.copy(alpha = 0.55f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 17.sp,
+                        style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = FontWeight.Medium,
                         ),
                     )
 
-                    Spacer(modifier = Modifier.height(3.dp))
+                    Spacer(modifier = Modifier.height(2.dp))
 
                     Text(
                         text = item.album,
                         color = Color.White,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontSize = 22.sp,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                         ),
                     )
 
                     item.releaseDate?.takeIf { it.isNotBlank() }?.let { date ->
-                        Spacer(modifier = Modifier.height(3.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = date,
-                            color = Color.White.copy(alpha = 0.45f),
+                            color = Color.White.copy(alpha = 0.35f),
                             style = MaterialTheme.typography.bodySmall.copy(
                                 letterSpacing = 0.5.sp,
                             ),
@@ -233,15 +232,15 @@ private fun RatingContent(
                     }
 
                     if (isLocked) {
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Lock,
                                 contentDescription = "Already rated",
-                                modifier = Modifier.size(12.dp),
+                                modifier = Modifier.size(11.dp),
                                 tint = LockedGold,
                             )
                             Text(
@@ -256,7 +255,7 @@ private fun RatingContent(
                 }
             }
 
-            Spacer(modifier = Modifier.height(18.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             SubmitButton(
                 submissionState = submissionState,
@@ -267,7 +266,7 @@ private fun RatingContent(
             )
         }
 
-        /* Right: circular drag dial — use weight so it doesn't steal all width */
+        /* Right: circular drag dial */
         Box(
             modifier = Modifier
                 .weight(0.7f)
@@ -300,10 +299,8 @@ private fun AlbumArtwork(
 
     Box(
         modifier = modifier
-            .shadow(24.dp, ArtworkShape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
             .clip(ArtworkShape)
-            .background(Color(0x2014191F))
-            .border(1.dp, CardBorder, ArtworkShape),
+            .background(Color.White.copy(alpha = 0.04f)),
         contentAlignment = Alignment.Center,
     ) {
         if (artworkUrl != null) {
@@ -341,7 +338,7 @@ private fun ArtworkPlaceholder() {
     ) {
         Box(
             modifier = Modifier
-                .size(52.dp)
+                .size(36.dp)
                 .clip(CircleShape)
                 .background(Color.White.copy(alpha = 0.10f)),
             contentAlignment = Alignment.Center,
@@ -349,7 +346,7 @@ private fun ArtworkPlaceholder() {
             Text(
                 text = "S",
                 color = Color.White.copy(alpha = 0.6f),
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black),
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
             )
         }
     }
@@ -431,8 +428,8 @@ private fun RatingDial(
         contentAlignment = Alignment.Center,
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val strokeWidth = size.minDimension * 0.09f
-            val pad = strokeWidth / 2f + 4f
+            val strokeWidth = size.minDimension * 0.07f
+            val pad = strokeWidth / 2f + 6f
             val arcSize = Size(size.width - pad * 2, size.height - pad * 2)
             val topLeft = Offset(pad, pad)
 
@@ -473,14 +470,16 @@ private fun RatingDial(
                 center.x + radius * cos(thumbAngleRad).toFloat(),
                 center.y + radius * sin(thumbAngleRad).toFloat(),
             )
+            // Outer white ring
             drawCircle(
                 color = Color.White,
-                radius = strokeWidth * 0.72f,
+                radius = strokeWidth * 0.85f,
                 center = thumbPos,
             )
+            // Inner active color fill
             drawCircle(
                 color = activeColor,
-                radius = strokeWidth * 0.46f,
+                radius = strokeWidth * 0.52f,
                 center = thumbPos,
             )
         }
@@ -498,7 +497,7 @@ private fun RatingDial(
                     text = String.format("%.1f", value),
                     color = if (isLocked) LockedGold else Color.White,
                     style = MaterialTheme.typography.displaySmall.copy(
-                        fontSize = 38.sp,
+                        fontSize = 36.sp,
                         fontWeight = FontWeight.Bold,
                     ),
                 )
@@ -528,30 +527,30 @@ private fun SubmitButton(
     val enabled = !isLocked && !isLookingUp && submissionState == SubmissionState.Idle
 
     val backgroundColor = when {
-        isLocked -> CardSurface
-        submissionState == SubmissionState.Success -> SpotifyGreen.copy(alpha = 0.25f)
-        submissionState == SubmissionState.Error -> Color(0x40FF4444)
-        else -> SpotifyGreen.copy(alpha = 0.18f)
-    }
-    val borderColor = when {
-        isLocked -> LockedGold.copy(alpha = 0.3f)
-        submissionState == SubmissionState.Success -> SpotifyGreen.copy(alpha = 0.5f)
-        submissionState == SubmissionState.Error -> Color(0xFFFF4444).copy(alpha = 0.4f)
-        else -> SpotifyGreen.copy(alpha = 0.35f)
+        isLocked -> CardBackground
+        submissionState == SubmissionState.Success -> SpotifyGreen.copy(alpha = 0.15f)
+        submissionState == SubmissionState.Error -> Color(0xFFFF4444).copy(alpha = 0.12f)
+        enabled -> SpotifyGreen
+        else -> SpotifyGreen.copy(alpha = 0.12f)
     }
     val textColor = when {
         isLocked -> LockedGold.copy(alpha = 0.6f)
-        !enabled -> Color.White.copy(alpha = 0.4f)
-        else -> Color.White
+        submissionState == SubmissionState.Success -> SpotifyGreen
+        submissionState == SubmissionState.Error -> Color(0xFFFF8B8B)
+        enabled -> Color.Black
+        else -> Color.White.copy(alpha = 0.4f)
     }
 
     Box(
         modifier = Modifier
-            .fillMaxWidth(0.7f)
+            .fillMaxWidth()
             .height(44.dp)
-            .clip(SquircleShape(14.dp))
+            .clip(SquircleShape(22.dp))
             .background(backgroundColor)
-            .border(1.dp, borderColor, SquircleShape(14.dp))
+            .then(
+                if (isLocked) Modifier.border(1.dp, LockedGold.copy(alpha = 0.2f), SquircleShape(22.dp))
+                else Modifier,
+            )
             .then(
                 if (enabled) Modifier.clickable(onClick = onSubmit)
                 else Modifier,
@@ -569,7 +568,7 @@ private fun SubmitButton(
                         color = textColor,
                         style = MaterialTheme.typography.labelLarge.copy(
                             fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 0.8.sp,
+                            letterSpacing = 0.5.sp,
                         ),
                     )
                 }

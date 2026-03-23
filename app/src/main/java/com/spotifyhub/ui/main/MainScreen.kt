@@ -342,7 +342,7 @@ private fun SidebarRail(
             /* Center: tab icons */
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 TabIcon(
                     icon = if (selectedTab == MainTab.Home) AppIcons.homeSelected else AppIcons.home,
@@ -398,27 +398,18 @@ private fun TabIcon(
         else -> Color.White.copy(alpha = 0.45f)
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .clip(SquircleShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 4.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(26.dp),
             tint = tint,
-        )
-        Text(
-            text = label,
-            color = tint,
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 8.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-            ),
         )
     }
 }
