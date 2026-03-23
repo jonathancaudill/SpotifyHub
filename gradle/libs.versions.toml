@@ -13,6 +13,7 @@ coil = "2.7.0"
 browser = "1.9.0"
 appcompat = "1.7.1"
 security-crypto = "1.1.0"
+cupertino = "0.1.0-alpha04"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
@@ -45,6 +46,8 @@ moshi-kotlin-codegen = { module = "com.squareup.moshi:moshi-kotlin-codegen", ver
 coil-compose = { module = "io.coil-kt:coil-compose", version.ref = "coil" }
 coil-okhttp = { module = "io.coil-kt:coil-network-okhttp", version.ref = "coil" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+cupertino-icons-extended = { module = "io.github.alexzhirkevich:cupertino-icons-extended", version.ref = "cupertino" }
+cupertino = { module = "io.github.alexzhirkevich:cupertino", version.ref = "cupertino" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

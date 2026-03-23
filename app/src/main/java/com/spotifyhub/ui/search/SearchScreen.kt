@@ -19,8 +19,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +42,8 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.spotifyhub.browse.model.BrowseItem
 import com.spotifyhub.browse.model.BrowseItemType
+import com.spotifyhub.search.model.SearchSection
+import com.spotifyhub.ui.icons.AppIcons
 import com.spotifyhub.ui.common.NowPlayingIndicator
 import com.spotifyhub.ui.common.bounceOverscroll
 
@@ -135,40 +135,47 @@ fun SearchScreen(
                         .bounceOverscroll(orientation = Orientation.Vertical),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    if (results.tracks.isNotEmpty()) {
-                        item {
-                            SectionHeader("Songs")
-                        }
-                        items(results.tracks, key = { "track-${it.id}" }) { item ->
-                            SearchResultRow(
-                                item = item,
-                                isNowPlaying = isPlaybackActive && currentTrackId == item.id,
-                                onClick = { onItemClick(item) },
-                            )
-                        }
-                    }
-                    if (results.artists.isNotEmpty()) {
-                        item {
-                            SectionHeader("Artists")
-                        }
-                        items(results.artists, key = { "artist-${it.id}" }) { item ->
-                            SearchResultRow(item = item, isNowPlaying = false, onClick = { onItemClick(item) })
-                        }
-                    }
-                    if (results.albums.isNotEmpty()) {
-                        item {
-                            SectionHeader("Albums")
-                        }
-                        items(results.albums, key = { "album-${it.id}" }) { item ->
-                            SearchResultRow(item = item, isNowPlaying = false, onClick = { onItemClick(item) })
-                        }
-                    }
-                    if (results.playlists.isNotEmpty()) {
-                        item {
-                            SectionHeader("Playlists")
-                        }
-                        items(results.playlists, key = { "playlist-${it.id}" }) { item ->
-                            SearchResultRow(item = item, isNowPlaying = false, onClick = { onItemClick(item) })
+                    results.sectionOrder.forEach { section ->
+                        when (section) {
+                            SearchSection.Tracks -> {
+                                item {
+                                    SectionHeader("Songs")
+                                }
+                                items(results.tracks, key = { "track-${it.id}" }) { item ->
+                                    SearchResultRow(
+                                        item = item,
+                                        isNowPlaying = isPlaybackActive && currentTrackId == item.id,
+                                        onClick = { onItemClick(item) },
+                                    )
+                                }
+                            }
+
+                            SearchSection.Artists -> {
+                                item {
+                                    SectionHeader("Artists")
+                                }
+                                items(results.artists, key = { "artist-${it.id}" }) { item ->
+                                    SearchResultRow(item = item, isNowPlaying = false, onClick = { onItemClick(item) })
+                                }
+                            }
+
+                            SearchSection.Albums -> {
+                                item {
+                                    SectionHeader("Albums")
+                                }
+                                items(results.albums, key = { "album-${it.id}" }) { item ->
+                                    SearchResultRow(item = item, isNowPlaying = false, onClick = { onItemClick(item) })
+                                }
+                            }
+
+                            SearchSection.Playlists -> {
+                                item {
+                                    SectionHeader("Playlists")
+                                }
+                                items(results.playlists, key = { "playlist-${it.id}" }) { item ->
+                                    SearchResultRow(item = item, isNowPlaying = false, onClick = { onItemClick(item) })
+                                }
+                            }
                         }
                     }
                 }
@@ -192,7 +199,7 @@ private fun SearchBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
-            imageVector = Icons.Rounded.Search,
+            imageVector = AppIcons.search,
             contentDescription = "Search",
             tint = Color.White.copy(alpha = 0.6f),
             modifier = Modifier.size(20.dp),
@@ -250,34 +257,33 @@ private fun SearchResultRow(
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (item.type == BrowseItemType.Track) {
-            Box(
-                modifier = Modifier.width(20.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                if (isNowPlaying) {
-                    NowPlayingIndicator(modifier = Modifier.width(12.dp))
-                }
+        Box {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(item.artworkUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = item.title,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(
+                        if (item.type == BrowseItemType.Artist) {
+                            androidx.compose.foundation.shape.CircleShape
+                        } else {
+                            RoundedCornerShape(6.dp)
+                        },
+                    ),
+                contentScale = ContentScale.Crop,
+            )
+            if (item.type == BrowseItemType.Track && isNowPlaying) {
+                NowPlayingIndicator(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .padding(start = 4.dp)
+                        .width(12.dp),
+                )
             }
-            Spacer(modifier = Modifier.width(8.dp))
         }
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(item.artworkUrl)
-                .crossfade(true)
-                .build(),
-            contentDescription = item.title,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(
-                    if (item.type == BrowseItemType.Artist) {
-                        androidx.compose.foundation.shape.CircleShape
-                    } else {
-                        RoundedCornerShape(6.dp)
-                    },
-                ),
-            contentScale = ContentScale.Crop,
-        )
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(

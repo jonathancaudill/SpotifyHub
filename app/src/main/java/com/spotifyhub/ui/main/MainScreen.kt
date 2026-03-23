@@ -25,11 +25,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.MusicNote
-import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -53,6 +48,7 @@ import com.spotifyhub.ui.detail.DetailScreen
 import com.spotifyhub.ui.detail.DetailViewModel
 import com.spotifyhub.ui.home.HomeScreen
 import com.spotifyhub.ui.home.HomeViewModel
+import com.spotifyhub.ui.icons.AppIcons
 import com.spotifyhub.ui.library.LibraryScreen
 import com.spotifyhub.ui.library.LibraryViewModel
 import com.spotifyhub.ui.nowplaying.NowPlayingContent
@@ -112,7 +108,7 @@ fun MainScreen(
     val handleBrowseItemClick: (com.spotifyhub.browse.model.BrowseItem) -> Unit = { item ->
         when (item.type) {
             com.spotifyhub.browse.model.BrowseItemType.Playlist -> {
-                detailViewModel.loadPlaylist(item.id)
+                detailViewModel.loadPlaylist(item.id, fallbackItem = item)
                 mainViewModel.openDetail()
             }
             com.spotifyhub.browse.model.BrowseItemType.Album -> {
@@ -351,35 +347,38 @@ private fun SidebarRail(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 TabIcon(
-                    icon = Icons.Rounded.Home,
+                    icon = if (selectedTab == MainTab.Home) AppIcons.homeSelected else AppIcons.home,
                     label = "Home",
                     isSelected = selectedTab == MainTab.Home,
                     onClick = { onTabSelected(MainTab.Home) },
                 )
                 TabIcon(
-                    icon = Icons.Rounded.Search,
+                    icon = if (selectedTab == MainTab.Search) AppIcons.searchSelected else AppIcons.search,
                     label = "Search",
                     isSelected = selectedTab == MainTab.Search,
                     onClick = { onTabSelected(MainTab.Search) },
                 )
                 TabIcon(
-                    icon = Icons.Rounded.MusicNote,
+                    icon = if (selectedTab == MainTab.Library) AppIcons.librarySelected else AppIcons.library,
                     label = "Library",
                     isSelected = selectedTab == MainTab.Library,
                     onClick = { onTabSelected(MainTab.Library) },
                 )
                 TabIcon(
-                    icon = Icons.Rounded.Star,
+                    icon = if (selectedTab == MainTab.Rate) AppIcons.rateSelected else AppIcons.rate,
                     label = "Rate",
                     isSelected = selectedTab == MainTab.Rate,
                     onClick = { onTabSelected(MainTab.Rate) },
                 )
                 TabIcon(
-                    icon = null,
+                    icon = if (selectedTab == MainTab.NowPlaying) {
+                        AppIcons.nowPlayingSelected
+                    } else {
+                        AppIcons.nowPlaying
+                    },
                     label = "Playing",
                     isSelected = selectedTab == MainTab.NowPlaying,
                     onClick = { onTabSelected(MainTab.NowPlaying) },
-                    isNowPlaying = true,
                 )
             }
 
@@ -418,11 +417,10 @@ private fun SidebarRail(
 
 @Composable
 private fun TabIcon(
-    icon: ImageVector?,
+    icon: ImageVector,
     label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
-    isNowPlaying: Boolean = false,
 ) {
     val tint = when {
         isSelected -> Color.White
@@ -437,32 +435,12 @@ private fun TabIcon(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        if (isNowPlaying) {
-            /* Waveform-style icon for now playing */
-            Row(
-                modifier = Modifier.height(22.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.Bottom,
-            ) {
-                val heights = listOf(10.dp, 16.dp, 12.dp, 18.dp)
-                heights.forEach { h ->
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .height(h)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(if (isSelected) SpotifyGreen else tint),
-                    )
-                }
-            }
-        } else if (icon != null) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                modifier = Modifier.size(22.dp),
-                tint = tint,
-            )
-        }
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            modifier = Modifier.size(22.dp),
+            tint = tint,
+        )
         Text(
             text = label,
             color = tint,

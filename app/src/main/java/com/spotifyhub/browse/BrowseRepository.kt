@@ -1,18 +1,30 @@
 package com.spotifyhub.browse
 
+import android.util.Log
+import com.spotifyhub.BuildConfig
 import com.spotifyhub.browse.model.BrowseItem
 import com.spotifyhub.browse.model.BrowseItemType
 import com.spotifyhub.browse.model.HomeData
 import com.spotifyhub.browse.model.HomeSection
 import com.spotifyhub.browse.model.SectionStyle
 import com.spotifyhub.spotify.api.SpotifyBrowseApi
+import com.spotifyhub.spotify.api.SpotifyEmbedApi
+import com.spotifyhub.spotify.api.SpotifyLibraryApi
+import com.spotifyhub.spotify.api.SpotifySearchApi
+import com.spotifyhub.spotify.dto.browse.ArtistFullDto
+import com.spotifyhub.spotify.dto.browse.SimplifiedPlaylistDto
 import com.spotifyhub.spotify.mapper.BrowseMapper
+import com.spotifyhub.spotify.mapper.SearchMapper
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import java.util.Calendar
 
 class BrowseRepository(
     private val browseApi: SpotifyBrowseApi,
+    private val libraryApi: SpotifyLibraryApi,
+    private val searchApi: SpotifySearchApi,
+    private val embedApi: SpotifyEmbedApi,
 ) {
     private var cachedHomeData: HomeData? = null
     private var cacheTimestamp: Long = 0L
@@ -27,17 +39,23 @@ class BrowseRepository(
         return coroutineScope {
             val profileDeferred = async { runCatching { browseApi.getCurrentUserProfile() }.getOrNull() }
             val recentDeferred = async { runCatching { browseApi.getRecentlyPlayed(limit = 50) }.getOrNull() }
-            val topTracksDeferred = async { runCatching { browseApi.getTopTracks(timeRange = "short_term", limit = 20) }.getOrNull() }
+            val topTracksShortDeferred = async { runCatching { browseApi.getTopTracks(timeRange = "short_term", limit = 20) }.getOrNull() }
+            val topTracksMediumDeferred = async { runCatching { browseApi.getTopTracks(timeRange = "medium_term", limit = 20) }.getOrNull() }
             val topArtistsDeferred = async { runCatching { browseApi.getTopArtists(timeRange = "medium_term", limit = 20) }.getOrNull() }
-            val playlistsDeferred = async { runCatching { browseApi.getUserPlaylists(limit = 50) }.getOrNull() }
-            val featuredDeferred = async { runCatching { browseApi.getFeaturedPlaylists(limit = 20) }.getOrNull() }
+            val allPlaylistsDeferred = async { runCatching { fetchAllUserPlaylists() }.getOrNull().orEmpty() }
+            val savedAlbumsDeferred = async { runCatching { libraryApi.getSavedAlbums(limit = 20) }.getOrNull() }
+            val savedTracksDeferred = async { runCatching { libraryApi.getSavedTracks(limit = 20) }.getOrNull() }
+            val pinnedPlaylistSectionsDeferred = async { fetchPinnedPlaylistSections() }
 
             val profile = profileDeferred.await()
             val recent = recentDeferred.await()
-            val topTracks = topTracksDeferred.await()
+            val topTracksShort = topTracksShortDeferred.await()
+            val topTracksMedium = topTracksMediumDeferred.await()
             val topArtists = topArtistsDeferred.await()
-            val playlists = playlistsDeferred.await()
-            val featured = featuredDeferred.await()
+            val allPlaylists = allPlaylistsDeferred.await()
+            val savedAlbums = savedAlbumsDeferred.await()
+            val savedTracks = savedTracksDeferred.await()
+            val pinnedPlaylistSections = pinnedPlaylistSectionsDeferred.await()
 
             val displayName = profile?.displayName
             cachedDisplayName = displayName
@@ -48,52 +66,122 @@ class BrowseRepository(
                 .distinctBy { it.contextUri ?: it.id }
                 .take(6)
 
-            /* Build sections */
-            val sections = mutableListOf<HomeSection>()
-
-            /* Made for You — filter personalized playlists */
-            val madeForYou = playlists?.items.orEmpty()
-                .filter { isMadeForYouPlaylist(it) }
+            /* ── Categorize personalized playlists ──────────────────── */
+            val categorized = allPlaylists
+                .mapNotNull { playlist ->
+                    categorizePlaylist(playlist)?.let { cat -> cat to playlist }
+                }
+                .groupBy({ it.first }, { it.second })
+            val pinnedPlaylistIds = pinnedPersonalizedPlaylists.values.flatten().toSet()
+            val personalizedPlaylistIds = categorized.values.flatten().mapNotNull { it.id }.toSet()
+            val libraryPlaylistItems = allPlaylists
+                .filter { it.id !in personalizedPlaylistIds && it.id !in pinnedPlaylistIds }
                 .mapNotNull { BrowseMapper.mapPlaylistToBrowseItem(it) }
-            if (madeForYou.isNotEmpty()) {
-                sections += HomeSection("Made for You", madeForYou, SectionStyle.HorizontalCards)
-            }
+                .take(20)
+            val topTrackItems = topTracksShort?.items.orEmpty()
+                .mapNotNull { BrowseMapper.mapTrackToBrowseItem(it) }
+                .distinctBy { it.id }
+            val topTrackDeepCuts = topTracksMedium?.items.orEmpty()
+                .mapNotNull { BrowseMapper.mapTrackToBrowseItem(it) }
+                .distinctBy { it.id }
+                .filterNot { mediumItem -> topTrackItems.any { it.id == mediumItem.id } }
+            val savedAlbumItems = savedAlbums?.items.orEmpty()
+                .mapNotNull { savedAlbum ->
+                    val album = savedAlbum.album ?: return@mapNotNull null
+                    val id = album.id ?: return@mapNotNull null
+                    com.spotifyhub.browse.model.BrowseItem(
+                        id = id,
+                        title = album.name.orEmpty(),
+                        subtitle = album.artists.orEmpty().joinToString(", ") { it.name.orEmpty() },
+                        artworkUrl = album.images.orEmpty().firstOrNull()?.url,
+                        uri = album.uri.orEmpty(),
+                        type = com.spotifyhub.browse.model.BrowseItemType.Album,
+                    )
+                }
+                .take(20)
+            val savedTrackItems = savedTracks?.items.orEmpty()
+                .mapNotNull { it.track?.let(BrowseMapper::mapTrackToBrowseItem) }
+                .distinctBy { it.id }
+                .take(20)
+            val genreSections = fetchGenreSearchSections(topArtists?.items.orEmpty())
 
-            /* Recently Played */
+            /* ── Build sections in Spotify-like order ───────────────── */
+            val sections = mutableListOf<HomeSection>()
+            /* 1. Discover Weekly & Release Radar */
+            pinnedPlaylistSections
+                .firstOrNull { it.title == "Discover Weekly & Release Radar" }
+                ?.let { sections += it }
+                ?: addPlaylistSection(
+                    sections, categorized, PersonalizedCategory.DISCOVER_RELEASE,
+                    "Discover Weekly & Release Radar",
+                )
+
+            /* 2. Your Daily Mixes */
+            pinnedPlaylistSections
+                .firstOrNull { it.title == "Your Daily Mixes" }
+                ?.let { sections += it }
+                ?: addPlaylistSection(
+                    sections, categorized, PersonalizedCategory.DAILY_MIX,
+                    "Your Daily Mixes",
+                )
+
+            /* 3. Recently Played */
             val recentUnique = recentItems.distinctBy { it.id }.take(20)
             if (recentUnique.isNotEmpty()) {
                 sections += HomeSection("Recently Played", recentUnique, SectionStyle.HorizontalCards)
             }
 
-            /* Your Top Artists */
+            /* 4. Your Top Tracks Right Now */
+            topTrackItems
+                .takeIf { it.isNotEmpty() }
+                ?.let { sections += HomeSection("Your Top Tracks Right Now", it, SectionStyle.HorizontalCards) }
+
+            /* 5. Your Top Artists */
             val artists = topArtists?.items.orEmpty().mapNotNull { BrowseMapper.mapArtistToBrowseItem(it) }
             if (artists.isNotEmpty()) {
                 sections += HomeSection("Your Top Artists", artists, SectionStyle.HorizontalCircle)
             }
 
-            /* Recommended — seed from top artists + tracks for recommendations */
-            val seedArtistIds = topArtists?.items.orEmpty().take(2).mapNotNull { it.id }.joinToString(",")
-            val seedTrackIds = topTracks?.items.orEmpty().take(3).mapNotNull { it.id }.joinToString(",")
-            if (seedArtistIds.isNotBlank() || seedTrackIds.isNotBlank()) {
-                val recs = runCatching {
-                    browseApi.getRecommendations(
-                        seedArtists = seedArtistIds.takeIf { it.isNotBlank() },
-                        seedTracks = seedTrackIds.takeIf { it.isNotBlank() },
-                        limit = 20,
-                    )
-                }.getOrNull()
-                val recItems = recs?.tracks.orEmpty().mapNotNull { BrowseMapper.mapTrackToBrowseItem(it) }
-                if (recItems.isNotEmpty()) {
-                    sections += HomeSection("Recommended for You", recItems, SectionStyle.HorizontalCards)
-                }
-            }
+            /* 6. Mixes for You (genre/mood mixes) */
+            addPlaylistSection(
+                sections, categorized, PersonalizedCategory.FOR_YOU_MIX,
+                "Mixes for You",
+            )
 
-            /* Featured Playlists */
-            val featuredItems = featured?.playlists?.items.orEmpty().mapNotNull { BrowseMapper.mapPlaylistToBrowseItem(it) }
-            if (featuredItems.isNotEmpty()) {
-                val title = featured?.message?.takeIf { it.isNotBlank() } ?: "Featured Playlists"
-                sections += HomeSection(title, featuredItems, SectionStyle.HorizontalCards)
-            }
+            /* 7. Made by Spotify AI (daylist, blend, etc.) */
+            addPlaylistSection(
+                sections, categorized, PersonalizedCategory.AI_PLAYLIST,
+                "Made by Spotify AI",
+            )
+
+            /* 8. Saved Albums */
+            savedAlbumItems
+                .takeIf { it.isNotEmpty() }
+                ?.let { sections += HomeSection("Saved Albums", it, SectionStyle.HorizontalCards) }
+
+            /* 9. Deep-Cut Favorites */
+            topTrackDeepCuts
+                .takeIf { it.isNotEmpty() }
+                ?.let { sections += HomeSection("Deep-Cut Favorites", it, SectionStyle.HorizontalCards) }
+
+            /* 10. Made for You (catch-all remaining personalized) */
+            addPlaylistSection(
+                sections, categorized, PersonalizedCategory.OTHER_PERSONALIZED,
+                "Made for You",
+            )
+
+            /* 11. Saved Songs */
+            savedTrackItems
+                .takeIf { it.isNotEmpty() }
+                ?.let { sections += HomeSection("Saved Songs", it, SectionStyle.HorizontalCards) }
+
+            /* 12. Your Playlists */
+            libraryPlaylistItems
+                .takeIf { it.isNotEmpty() }
+                ?.let { sections += HomeSection("Your Playlists", it, SectionStyle.HorizontalCards) }
+
+            /* 13. Search-driven genre discovery */
+            sections += genreSections
 
             val homeData = HomeData(
                 greeting = buildGreeting(displayName),
@@ -109,6 +197,156 @@ class BrowseRepository(
 
     fun getCachedDisplayName(): String? = cachedDisplayName
 
+    /* ── Playlist pagination ───────────────────────────────────────── */
+
+    private suspend fun fetchAllUserPlaylists(): List<SimplifiedPlaylistDto> {
+        val allPlaylists = mutableListOf<SimplifiedPlaylistDto>()
+        var offset = 0
+        val limit = 50
+        do {
+            val page = browseApi.getUserPlaylists(limit = limit, offset = offset)
+            allPlaylists.addAll(page.items.orEmpty())
+            if (allPlaylists.size >= MAX_PLAYLISTS_TO_FETCH) {
+                return allPlaylists.take(MAX_PLAYLISTS_TO_FETCH)
+            }
+            offset += limit
+            // Cap at 200 to avoid excessive API calls for users with huge libraries
+        } while (page.next != null && allPlaylists.size < MAX_PLAYLISTS_TO_FETCH)
+        return allPlaylists
+    }
+
+    /* ── Search-driven discovery sections ─────────────────────────── */
+
+    private suspend fun fetchGenreSearchSections(
+        topArtists: List<ArtistFullDto>,
+    ): List<HomeSection> = coroutineScope {
+        val topGenres = topArtists
+            .flatMap { it.genres.orEmpty() }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .groupingBy { it }
+            .eachCount()
+            .entries
+            .sortedByDescending { it.value }
+            .map { it.key }
+            .take(2)
+
+        topGenres.map { genre ->
+            async {
+                val results = runCatching {
+                    searchApi.search(
+                        query = "genre:\"$genre\"",
+                        type = "playlist",
+                        limit = 10,
+                        market = "from_token",
+                        includeExternal = "audio",
+                    )
+                }.getOrNull()
+                val items = results?.let(SearchMapper::map)?.playlists.orEmpty()
+                if (items.isNotEmpty()) {
+                    HomeSection("Explore $genre", items, SectionStyle.HorizontalCards)
+                } else null
+            }
+        }.awaitAll().filterNotNull()
+    }
+
+    private suspend fun fetchPinnedPlaylistSections(): List<HomeSection> = coroutineScope {
+        pinnedPersonalizedPlaylists.map { (title, playlistIds) ->
+            async {
+                val items = playlistIds.mapNotNull { playlistId ->
+                    val playlistItem = runCatching {
+                        libraryApi.getPlaylist(playlistId)
+                    }.onFailure { error ->
+                        Log.w(TAG, "Pinned playlist Web API fetch failed for $playlistId", error)
+                    }.getOrNull()?.let { playlist ->
+                        SimplifiedPlaylistDto(
+                            id = playlist.id,
+                            name = playlist.name,
+                            images = playlist.images,
+                            owner = playlist.owner?.let { owner ->
+                                com.spotifyhub.spotify.dto.browse.PlaylistOwnerDto(
+                                    id = owner.id,
+                                    displayName = owner.displayName,
+                                )
+                            },
+                            uri = playlist.uri,
+                            description = playlist.description,
+                        )
+                    }?.let(BrowseMapper::mapPlaylistToBrowseItem)
+
+                    playlistItem ?: fetchPinnedPlaylistFallback(playlistId)
+                }
+
+                if (items.isNotEmpty()) {
+                    HomeSection(title, items, SectionStyle.HorizontalCards)
+                } else {
+                    null
+                }
+            }
+        }.awaitAll().filterNotNull()
+    }
+
+    /* ── Playlist categorization ───────────────────────────────────── */
+
+    private enum class PersonalizedCategory {
+        DISCOVER_RELEASE,
+        DAILY_MIX,
+        AI_PLAYLIST,
+        FOR_YOU_MIX,
+        OTHER_PERSONALIZED,
+    }
+
+    private fun categorizePlaylist(playlist: SimplifiedPlaylistDto): PersonalizedCategory? {
+        val name = playlist.name?.lowercase() ?: return null
+
+        return when {
+            name.contains("discover weekly") || name.contains("release radar") ->
+                PersonalizedCategory.DISCOVER_RELEASE
+
+            name.contains("daily mix") ->
+                PersonalizedCategory.DAILY_MIX
+
+            name.contains("daylist") || name.contains("blend") || name.contains("dj") ->
+                PersonalizedCategory.AI_PLAYLIST
+
+            name.contains("chill mix") || name.contains("focus mix") ||
+                name.contains("energy mix") || name.contains("mood mix") ||
+                name.contains("rock mix") || name.contains("pop mix") ||
+                name.contains("indie mix") || name.contains("jazz mix") ||
+                name.contains("r&b mix") || name.contains("hip hop mix") ||
+                name.contains("country mix") || name.contains("electronic mix") ||
+                name.contains("classical mix") || name.contains("metal mix") ||
+                name.contains("latin mix") || name.contains("folk mix") ||
+                name.contains("soul mix") || name.contains("punk mix") ||
+                name.contains("blues mix") || name.contains("reggae mix") ||
+                (name.endsWith(" mix") && !name.contains("daily mix")) ->
+                PersonalizedCategory.FOR_YOU_MIX
+
+            name.contains("on repeat") || name.contains("repeat rewind") ||
+                name.contains("time capsule") || name.contains("your top songs") ||
+                name.contains("summer rewind") || name.contains("wrapped") ->
+                PersonalizedCategory.OTHER_PERSONALIZED
+
+            else -> null
+        }
+    }
+
+    private fun addPlaylistSection(
+        sections: MutableList<HomeSection>,
+        categorized: Map<PersonalizedCategory, List<SimplifiedPlaylistDto>>,
+        category: PersonalizedCategory,
+        title: String,
+    ) {
+        val items = categorized[category]
+            ?.mapNotNull { BrowseMapper.mapPlaylistToBrowseItem(it) }
+            .orEmpty()
+        if (items.isNotEmpty()) {
+            sections += HomeSection(title, items, SectionStyle.HorizontalCards)
+        }
+    }
+
+    /* ── Helpers ────────────────────────────────────────────────────── */
+
     private fun buildGreeting(displayName: String?): String {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         val timeGreeting = when {
@@ -123,32 +361,74 @@ class BrowseRepository(
         }
     }
 
-    private fun isMadeForYouPlaylist(
-        playlist: com.spotifyhub.spotify.dto.browse.SimplifiedPlaylistDto,
-    ): Boolean {
-        val ownerIsSpotify = playlist.owner?.id == "spotify"
-        val name = playlist.name?.lowercase() ?: return false
-        val knownPatterns = listOf(
-            "discover weekly",
-            "release radar",
-            "daily mix",
-            "on repeat",
-            "repeat rewind",
-            "time capsule",
-            "daylist",
-            "blend",
-            "your top songs",
-            "chill mix",
-            "focus mix",
-            "energy mix",
-            "mood mix",
-            "summer rewind",
-            "wrapped",
-        )
-        return ownerIsSpotify && knownPatterns.any { name.contains(it) }
-    }
-
     companion object {
         private const val CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
+        private const val MAX_PLAYLISTS_TO_FETCH = 200
+        private const val TAG = "BrowseRepository"
+        private val openSpotifyPlaylistRegex =
+            Regex("(?i)(?:https?://)?open\\.spotify\\.com/playlist/([A-Za-z0-9]{22})")
+        private val spotifyPlaylistUriRegex = Regex("(?i)^spotify:playlist:([A-Za-z0-9]{22})$")
+        private val spotifyIdRegex = Regex("^[A-Za-z0-9]{22}$")
+    }
+
+    private val pinnedPersonalizedPlaylists: LinkedHashMap<String, List<String>>
+        get() = linkedMapOf<String, List<String>>().apply {
+            val discoverRelease = parsePlaylistIds(BuildConfig.SPOTIFY_HOME_DISCOVER_RELEASE_IDS)
+            if (discoverRelease.isNotEmpty()) {
+                put("Discover Weekly & Release Radar", discoverRelease)
+            }
+
+            val dailyMixes = parsePlaylistIds(BuildConfig.SPOTIFY_HOME_DAILY_MIX_IDS)
+            if (dailyMixes.isNotEmpty()) {
+                put("Your Daily Mixes", dailyMixes)
+            }
+        }
+
+    private fun parsePlaylistIds(raw: String): List<String> {
+        return raw.split(",")
+            .mapNotNull(::normalizePlaylistId)
+            .distinct()
+    }
+
+    private fun normalizePlaylistId(rawValue: String): String? {
+        val value = rawValue
+            .trim()
+            .removeSurrounding("\"")
+            .removeSurrounding("'")
+
+        if (value.isBlank()) {
+            return null
+        }
+
+        spotifyPlaylistUriRegex.matchEntire(value)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.let { return it }
+
+        openSpotifyPlaylistRegex.find(value)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.let { return it }
+
+        val cleaned = value.substringBefore("?").substringBefore("/")
+        return if (spotifyIdRegex.matches(cleaned)) cleaned else null
+    }
+
+    private suspend fun fetchPinnedPlaylistFallback(playlistId: String): BrowseItem? {
+        val playlistUrl = "https://open.spotify.com/playlist/$playlistId"
+        return runCatching {
+            embedApi.getOEmbed(url = playlistUrl)
+        }.onFailure { error ->
+            Log.w(TAG, "Pinned playlist oEmbed fallback failed for $playlistId", error)
+        }.getOrNull()?.let { embed ->
+            BrowseItem(
+                id = playlistId,
+                title = embed.title.orEmpty().ifBlank { "Spotify Playlist" },
+                subtitle = "Spotify",
+                artworkUrl = embed.thumbnail_url,
+                uri = "spotify:playlist:$playlistId",
+                type = BrowseItemType.Playlist,
+            )
+        }
     }
 }

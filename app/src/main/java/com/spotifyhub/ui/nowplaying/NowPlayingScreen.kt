@@ -30,16 +30,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Repeat
-import androidx.compose.material.icons.rounded.RepeatOne
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.SkipPrevious
-import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -83,10 +73,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.spotifyhub.playback.model.PlaybackDevice
+import com.spotifyhub.playback.model.PlaybackContentType
 import com.spotifyhub.playback.model.PlaybackItem
 import com.spotifyhub.playback.model.PlaybackSnapshot
 import com.spotifyhub.playback.model.RepeatMode
 import com.spotifyhub.theme.SpotifyHubTheme
+import com.spotifyhub.ui.icons.AppIcons
 import com.spotifyhub.ui.nowplaying.backdrop.AlbumBackdropHost
 import kotlin.math.max
 import kotlin.math.min
@@ -118,8 +110,10 @@ fun NowPlayingScreen(
         isOffline = isOffline,
         onRefresh = viewModel::refresh,
         onSkipPrevious = viewModel::skipPrevious,
+        onSeekBackward = { viewModel.seekBy(-15_000L) },
         onTogglePlayback = viewModel::togglePlayback,
         onSkipNext = viewModel::skipNext,
+        onSeekForward = { viewModel.seekBy(30_000L) },
         onToggleSave = viewModel::toggleSaveCurrentItem,
         onToggleShuffle = viewModel::toggleShuffle,
         onCycleRepeat = viewModel::cycleRepeatMode,
@@ -228,8 +222,10 @@ fun NowPlayingContent(
             saveEnabled = playback?.item != null && !uiState.isSendingCommand,
             utilityEnabled = playback?.device != null && !uiState.isSendingCommand,
             onSkipPrevious = viewModel::skipPrevious,
+            onSeekBackward = { viewModel.seekBy(-15_000L) },
             onTogglePlayback = viewModel::togglePlayback,
             onSkipNext = viewModel::skipNext,
+            onSeekForward = { viewModel.seekBy(30_000L) },
             onToggleSave = viewModel::toggleSaveCurrentItem,
             onToggleShuffle = viewModel::toggleShuffle,
             onCycleRepeat = viewModel::cycleRepeatMode,
@@ -249,8 +245,10 @@ fun NowPlayingScreen(
     isOffline: Boolean,
     onRefresh: () -> Unit,
     onSkipPrevious: () -> Unit,
+    onSeekBackward: () -> Unit,
     onTogglePlayback: () -> Unit,
     onSkipNext: () -> Unit,
+    onSeekForward: () -> Unit,
     onToggleSave: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
@@ -357,8 +355,10 @@ fun NowPlayingScreen(
                 saveEnabled = playback?.item != null && !uiState.isSendingCommand,
                 utilityEnabled = playback?.device != null && !uiState.isSendingCommand,
                 onSkipPrevious = onSkipPrevious,
+                onSeekBackward = onSeekBackward,
                 onTogglePlayback = onTogglePlayback,
                 onSkipNext = onSkipNext,
+                onSeekForward = onSeekForward,
                 onToggleSave = onToggleSave,
                 onToggleShuffle = onToggleShuffle,
                 onCycleRepeat = onCycleRepeat,
@@ -449,8 +449,10 @@ private fun MainContent(
     saveEnabled: Boolean,
     utilityEnabled: Boolean,
     onSkipPrevious: () -> Unit,
+    onSeekBackward: () -> Unit,
     onTogglePlayback: () -> Unit,
     onSkipNext: () -> Unit,
+    onSeekForward: () -> Unit,
     onToggleSave: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
@@ -518,11 +520,14 @@ private fun MainContent(
 
                 /* Transport controls — same column, below metadata */
                 TransportRow(
+                    item = item,
                     isPlaying = playback?.isPlaying == true,
                     enabled = transportEnabled,
                     onSkipPrevious = onSkipPrevious,
+                    onSeekBackward = onSeekBackward,
                     onTogglePlayback = onTogglePlayback,
                     onSkipNext = onSkipNext,
+                    onSeekForward = onSeekForward,
                 )
             }
 
@@ -637,24 +642,36 @@ private fun ArtworkPlaceholder() {
 
 @Composable
 private fun TransportRow(
+    item: PlaybackItem?,
     isPlaying: Boolean,
     enabled: Boolean,
     onSkipPrevious: () -> Unit,
+    onSeekBackward: () -> Unit,
     onTogglePlayback: () -> Unit,
     onSkipNext: () -> Unit,
+    onSeekForward: () -> Unit,
 ) {
+    val useRelativeSeekControls = item?.contentType == PlaybackContentType.Podcast ||
+        item?.contentType == PlaybackContentType.Audiobook
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TouchFeedbackButton(
-            onClick = onSkipPrevious,
+            onClick = if (useRelativeSeekControls) onSeekBackward else onSkipPrevious,
             enabled = enabled,
-            icon = Icons.Rounded.SkipPrevious,
-            contentDescription = "Previous track",
+            icon = if (useRelativeSeekControls) {
+                AppIcons.skip15Backward
+            } else {
+                AppIcons.skipTrackBackward
+            },
+            contentDescription = if (useRelativeSeekControls) "Back 15 seconds" else "Previous track",
             iconSize = 52.dp,
             modifier = Modifier.size(72.dp),
+            badgeText = if (useRelativeSeekControls) "15" else null,
+            badgeInsideIcon = useRelativeSeekControls,
         )
 
         Spacer(modifier = Modifier.width(24.dp))
@@ -662,7 +679,7 @@ private fun TransportRow(
         TouchFeedbackButton(
             onClick = onTogglePlayback,
             enabled = enabled,
-            icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+            icon = if (isPlaying) AppIcons.pause else AppIcons.play,
             contentDescription = if (isPlaying) "Pause" else "Play",
             iconSize = 64.dp,
             modifier = Modifier.size(88.dp),
@@ -671,12 +688,18 @@ private fun TransportRow(
         Spacer(modifier = Modifier.width(24.dp))
 
         TouchFeedbackButton(
-            onClick = onSkipNext,
+            onClick = if (useRelativeSeekControls) onSeekForward else onSkipNext,
             enabled = enabled,
-            icon = Icons.Rounded.SkipNext,
-            contentDescription = "Next track",
+            icon = if (useRelativeSeekControls) {
+                AppIcons.skip30Forward
+            } else {
+                AppIcons.skipTrackForward
+            },
+            contentDescription = if (useRelativeSeekControls) "Forward 30 seconds" else "Next track",
             iconSize = 52.dp,
             modifier = Modifier.size(72.dp),
+            badgeText = if (useRelativeSeekControls) "30" else null,
+            badgeInsideIcon = useRelativeSeekControls,
         )
     }
 }
@@ -703,7 +726,7 @@ private fun UtilityRow(
         TouchFeedbackButton(
             onClick = onToggleShuffle,
             enabled = utilityEnabled && playback?.item != null,
-            icon = Icons.Rounded.Shuffle,
+            icon = AppIcons.shuffle,
             contentDescription = if (playback?.isShuffleEnabled == true) "Disable shuffle" else "Enable shuffle",
             iconSize = 30.dp,
             modifier = Modifier.size(52.dp),
@@ -715,7 +738,7 @@ private fun UtilityRow(
         TouchFeedbackButton(
             onClick = onCycleRepeat,
             enabled = utilityEnabled && playback?.item != null,
-            icon = if (repeatMode == RepeatMode.Track) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
+            icon = if (repeatMode == RepeatMode.Track) AppIcons.repeatOne else AppIcons.repeat,
             contentDescription = when (repeatMode) {
                 RepeatMode.Off -> "Enable repeat"
                 RepeatMode.Context -> "Repeat playlist or album"
@@ -724,6 +747,7 @@ private fun UtilityRow(
             iconSize = 30.dp,
             modifier = Modifier.size(52.dp),
             activeColor = if (repeatMode != RepeatMode.Off) Color.White else Color.White.copy(alpha = 0.55f),
+            badgeText = if (repeatMode == RepeatMode.Track) "1" else null,
         )
 
         Spacer(modifier = Modifier.width(32.dp))
@@ -731,7 +755,7 @@ private fun UtilityRow(
         TouchFeedbackButton(
             onClick = onToggleSave,
             enabled = saveEnabled,
-            icon = if (isCurrentItemSaved) Icons.Rounded.Check else Icons.Rounded.Add,
+            icon = if (isCurrentItemSaved) AppIcons.trackSaved else AppIcons.saveTrack,
             contentDescription = if (isCurrentItemSaved) "Remove from library" else "Save to library",
             iconSize = 30.dp,
             modifier = Modifier.size(52.dp),
@@ -885,6 +909,8 @@ private fun TouchFeedbackButton(
     iconSize: Dp,
     modifier: Modifier = Modifier,
     activeColor: Color = Color.White,
+    badgeText: String? = null,
+    badgeInsideIcon: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -924,6 +950,31 @@ private fun TouchFeedbackButton(
             modifier = Modifier.size(iconSize),
             tint = if (enabled) activeColor else activeColor.copy(alpha = 0.30f),
         )
+        if (!badgeText.isNullOrBlank()) {
+            Text(
+                text = badgeText,
+                color = if (enabled) activeColor else activeColor.copy(alpha = 0.30f),
+                style = if (badgeInsideIcon) {
+                    MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Black,
+                        fontSize = 14.sp,
+                        letterSpacing = 0.sp,
+                    )
+                } else {
+                    MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.sp,
+                    )
+                },
+                modifier = if (badgeInsideIcon) {
+                    Modifier.align(Alignment.Center)
+                } else {
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .offset(y = (-6).dp)
+                },
+            )
+        }
     }
 }
 
@@ -1007,6 +1058,7 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
                         artworkUrl = null,
                         releaseDate = "2016-11-25",
                         uri = "spotify:track:preview-1",
+                        contentType = PlaybackContentType.Track,
                     ),
                     device = PlaybackDevice(
                         id = "preview-device-1",
@@ -1039,6 +1091,7 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
                         artworkUrl = null,
                         releaseDate = "2020-03-20",
                         uri = "spotify:track:preview-2",
+                        contentType = PlaybackContentType.Track,
                     ),
                     device = PlaybackDevice(
                         id = "preview-device-2",
@@ -1077,8 +1130,10 @@ private fun NowPlayingWidePreview(
             isOffline = preview.isOffline,
             onRefresh = {},
             onSkipPrevious = {},
+            onSeekBackward = {},
             onTogglePlayback = {},
             onSkipNext = {},
+            onSeekForward = {},
             onToggleSave = {},
             onToggleShuffle = {},
             onCycleRepeat = {},

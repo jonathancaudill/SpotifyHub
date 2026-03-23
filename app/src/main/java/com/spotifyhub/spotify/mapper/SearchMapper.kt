@@ -10,11 +10,21 @@ object SearchMapper {
 
     fun map(dto: SearchResponseDto): SearchResults {
         return SearchResults(
-            tracks = dto.tracks?.items.orEmpty().filterNotNull().mapNotNull { BrowseMapper.mapTrackToBrowseItem(it) },
+            tracks = dto.tracks?.items.orEmpty().filterNotNull().mapNotNull { mapTrackToSearchBrowseItem(it) },
             albums = dto.albums?.items.orEmpty().filterNotNull().mapNotNull { mapAlbumToBrowseItem(it) },
             artists = dto.artists?.items.orEmpty().filterNotNull().mapNotNull { BrowseMapper.mapArtistToBrowseItem(it) },
             playlists = dto.playlists?.items.orEmpty().filterNotNull().mapNotNull { BrowseMapper.mapPlaylistToBrowseItem(it) },
         )
+    }
+
+    private fun mapTrackToSearchBrowseItem(dto: com.spotifyhub.spotify.dto.player.TrackDto): BrowseItem? {
+        val baseItem = BrowseMapper.mapTrackToBrowseItem(dto) ?: return null
+        val albumName = dto.album?.name.orEmpty().trim()
+        val enhancedSubtitle = listOf(baseItem.subtitle, albumName)
+            .filter { it.isNotBlank() }
+            .joinToString(" • ")
+
+        return baseItem.copy(subtitle = enhancedSubtitle)
     }
 
     private fun mapAlbumToBrowseItem(dto: SimplifiedAlbumDto): BrowseItem? {

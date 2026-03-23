@@ -7,6 +7,7 @@ import com.spotifyhub.spotify.api.PlayContextBody
 import com.spotifyhub.spotify.api.PlayOffset
 import com.spotifyhub.spotify.api.SpotifyLibraryApi
 import com.spotifyhub.spotify.api.SpotifyPlayerApi
+import com.spotifyhub.spotify.dto.library.PlaylistTrackDto
 import com.spotifyhub.spotify.mapper.LibraryMapper
 import com.spotifyhub.spotify.dto.player.TrackDto
 
@@ -15,7 +16,7 @@ class LibraryRepository(
     private val playerApi: SpotifyPlayerApi,
 ) {
     private companion object {
-        const val PLAYLIST_TRACK_PAGE_SIZE = 100
+        const val PLAYLIST_TRACK_PAGE_SIZE = 50
         const val ALBUM_TRACK_PAGE_SIZE = 50
     }
 
@@ -39,8 +40,9 @@ class LibraryRepository(
 
     suspend fun getPlaylistDetail(playlistId: String): PlaylistDetail? {
         val response = libraryApi.getPlaylist(playlistId)
-        val firstPageTracks = response.tracks?.items.orEmpty().mapNotNull { it.track }
-        val totalTracks = response.tracks?.total ?: firstPageTracks.size
+        val firstPageTracks = response.items?.items.orEmpty().toTrackDtos()
+            .ifEmpty { response.tracks?.items.orEmpty().toTrackDtos() }
+        val totalTracks = response.items?.total ?: response.tracks?.total ?: firstPageTracks.size
         val allTracks = fetchRemainingPlaylistTracks(
             playlistId = playlistId,
             initialTracks = firstPageTracks,
@@ -114,7 +116,7 @@ class LibraryRepository(
                 limit = PLAYLIST_TRACK_PAGE_SIZE,
                 offset = offset,
             )
-            val pageTracks = page.items.orEmpty().mapNotNull { it.track }
+            val pageTracks = page.items.orEmpty().toTrackDtos()
             if (pageTracks.isEmpty()) {
                 break
             }
@@ -152,5 +154,9 @@ class LibraryRepository(
         }
 
         return tracks
+    }
+
+    private fun List<PlaylistTrackDto>.toTrackDtos(): List<TrackDto> {
+        return mapNotNull { it.track ?: it.item }
     }
 }

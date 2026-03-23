@@ -159,6 +159,24 @@ class PlaybackRepository(
         }
     }
 
+    fun seekBy(deltaMs: Long) {
+        appScope.launch {
+            val playback = _playbackState.value ?: return@launch
+            val durationMs = playback.durationMs
+            if (durationMs <= 0L) {
+                return@launch
+            }
+
+            val currentPositionMs = currentPlaybackPosition(playback)
+            val targetPositionMs = (currentPositionMs + deltaMs).coerceIn(0L, durationMs)
+            if (targetPositionMs == currentPositionMs) {
+                return@launch
+            }
+
+            executeCommand(command = { playerApi.seekTo(positionMs = targetPositionMs) })
+        }
+    }
+
     fun adjustVolume(deltaPercent: Int) {
         appScope.launch {
             val currentVolume = _playbackState.value?.device?.volumePercent ?: return@launch
@@ -208,6 +226,15 @@ class PlaybackRepository(
         delay(200L)
         fetchPlayback()
         _isSendingCommand.value = false
+    }
+
+    private fun currentPlaybackPosition(playback: PlaybackSnapshot): Long {
+        if (!playback.isPlaying) {
+            return playback.progressMs.coerceIn(0L, playback.durationMs)
+        }
+
+        val elapsedMs = (System.currentTimeMillis() - playback.fetchedAtEpochMs).coerceAtLeast(0L)
+        return (playback.progressMs + elapsedMs).coerceIn(0L, playback.durationMs)
     }
 
     private fun RepeatMode.toApiValue(): String {

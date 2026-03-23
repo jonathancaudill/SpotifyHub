@@ -19,7 +19,15 @@ data class PlaybackItem(
     val artworkUrl: String?,
     val releaseDate: String?,
     val uri: String,
+    val contentType: PlaybackContentType,
 )
+
+enum class PlaybackContentType {
+    Track,
+    Podcast,
+    Audiobook,
+    Unknown,
+}
 
 data class PlaybackDevice(
     val id: String,

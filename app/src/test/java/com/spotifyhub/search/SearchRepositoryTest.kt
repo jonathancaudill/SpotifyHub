@@ -1,5 +1,6 @@
 package com.spotifyhub.search
 
+import com.spotifyhub.search.model.SearchSection
 import com.spotifyhub.spotify.api.SpotifySearchApi
 import com.spotifyhub.spotify.dto.browse.ArtistFullDto
 import com.spotifyhub.spotify.dto.browse.PlaylistOwnerDto
@@ -36,6 +37,8 @@ class SearchRepositoryTest {
         assertFalse(results.isEmpty)
         assertEquals(1, api.calls.size)
         val call = api.calls.first()
+        assertEquals("track,album,artist,playlist", call.type)
+        assertEquals(10, call.limit)
         assertEquals("from_token", call.market)
         assertEquals("audio", call.includeExternal)
     }
@@ -53,6 +56,51 @@ class SearchRepositoryTest {
 
         assertEquals(listOf("ac/dc thunderstruck", "ac dc thunderstruck"), api.calls.map { it.query })
         assertEquals("Thunderstruck", results.tracks.first().title)
+    }
+
+    @Test
+    fun `search adds structured track query for artist title separators`() = runTest {
+        val api = FakeSpotifySearchApi(
+            responses = mapOf(
+                "track:Style artist:Taylor Swift" to responseWithTrack(name = "Style"),
+            ),
+        )
+        val repository = SearchRepository(api)
+
+        val results = repository.search("Taylor Swift - Style")
+
+        assertEquals(
+            listOf("Taylor Swift - Style", "track:Style artist:Taylor Swift"),
+            api.calls.map { it.query },
+        )
+        assertEquals("track", api.calls.last().type)
+        assertEquals("Style", results.tracks.first().title)
+    }
+
+    @Test
+    fun `search narrows explicit album filters into album focused request`() = runTest {
+        val api = FakeSpotifySearchApi(
+            responses = mapOf(
+                "album:Punisher artist:Phoebe Bridgers" to SearchResponseDto(
+                    albums = AlbumPagingDto(
+                        items = listOf(album(id = "punisher", name = "Punisher", artistName = "Phoebe Bridgers")),
+                    ),
+                ),
+            ),
+        )
+        val repository = SearchRepository(api)
+
+        val results = repository.search("artist:Phoebe Bridgers album:Punisher")
+
+        assertEquals(
+            listOf(
+                "artist:Phoebe Bridgers album:Punisher",
+                "album:Punisher artist:Phoebe Bridgers",
+            ),
+            api.calls.map { it.query },
+        )
+        assertEquals("album,track", api.calls.last().type)
+        assertEquals("Punisher", results.albums.first().title)
     }
 
     @Test
@@ -77,6 +125,84 @@ class SearchRepositoryTest {
         assertEquals("Hello", results.tracks.first().title)
     }
 
+    @Test
+    fun `search ranks tracks using album context when titles are identical`() = runTest {
+        val api = FakeSpotifySearchApi(
+            responses = mapOf(
+                "style 1989" to SearchResponseDto(
+                    tracks = TrackPagingDto(
+                        items = listOf(
+                            track(id = "2", name = "Style", artistName = "Taylor Swift", albumName = "Taylor Swift Essentials"),
+                            track(id = "1", name = "Style", artistName = "Taylor Swift", albumName = "1989"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val repository = SearchRepository(api)
+
+        val results = repository.search("style 1989")
+
+        assertEquals("1", results.tracks.first().id)
+        assertEquals("Style", results.tracks.first().title)
+        assertEquals("Taylor Swift • 1989", results.tracks.first().subtitle)
+    }
+
+    @Test
+    fun `search prefers artists section for loose artist name queries`() = runTest {
+        val api = FakeSpotifySearchApi(
+            responses = mapOf(
+                "sufjan" to SearchResponseDto(
+                    tracks = TrackPagingDto(
+                        items = listOf(
+                            track(id = "track-1", name = "Chicago", artistName = "Sufjan Stevens"),
+                            track(id = "track-2", name = "Fourth of July", artistName = "Sufjan Stevens"),
+                        ),
+                    ),
+                    artists = ArtistPagingDto(
+                        items = listOf(
+                            artist(id = "artist-1", name = "Sufjan Stevens"),
+                            artist(id = "artist-2", name = "Stevens Sufjan"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val repository = SearchRepository(api)
+
+        val results = repository.search("sufjan")
+
+        assertEquals(SearchSection.Artists, results.sectionOrder.first())
+        assertEquals("Sufjan Stevens", results.artists.first().title)
+    }
+
+    @Test
+    fun `search keeps songs first when the query directly matches track titles`() = runTest {
+        val api = FakeSpotifySearchApi(
+            responses = mapOf(
+                "hello" to SearchResponseDto(
+                    tracks = TrackPagingDto(
+                        items = listOf(
+                            track(id = "track-1", name = "Hello", artistName = "Adele"),
+                            track(id = "track-2", name = "Hello Again", artistName = "The Cars"),
+                        ),
+                    ),
+                    artists = ArtistPagingDto(
+                        items = listOf(
+                            artist(id = "artist-1", name = "Hello Seahorse!"),
+                        ),
+                    ),
+                ),
+            ),
+        )
+        val repository = SearchRepository(api)
+
+        val results = repository.search("hello")
+
+        assertEquals(SearchSection.Tracks, results.sectionOrder.first())
+        assertEquals("Hello", results.tracks.first().title)
+    }
+
     private fun responseWithTrack(name: String): SearchResponseDto {
         return SearchResponseDto(
             tracks = TrackPagingDto(items = listOf(track(id = "track-$name", name = name))),
@@ -86,26 +212,35 @@ class SearchRepositoryTest {
         )
     }
 
-    private fun track(id: String, name: String): TrackDto {
+    private fun track(
+        id: String,
+        name: String,
+        artistName: String = "Artist $name",
+        albumName: String = "Album $name",
+    ): TrackDto {
         return TrackDto(
             id = id,
             name = name,
             durationMs = 180_000,
             uri = "spotify:track:$id",
             album = AlbumDto(
-                name = "Album $name",
+                name = albumName,
                 images = listOf(ImageDto(url = "https://example.com/$id.jpg")),
             ),
-            artists = listOf(ArtistDto(name = "Artist $name")),
+            artists = listOf(ArtistDto(name = artistName)),
         )
     }
 
-    private fun album(id: String, name: String): SimplifiedAlbumDto {
+    private fun album(
+        id: String,
+        name: String,
+        artistName: String = "Artist $name",
+    ): SimplifiedAlbumDto {
         return SimplifiedAlbumDto(
             id = id,
             name = name,
             albumType = "album",
-            artists = listOf(ArtistDto(name = "Artist $name")),
+            artists = listOf(ArtistDto(name = artistName)),
             images = listOf(ImageDto(url = "https://example.com/$id.jpg")),
             totalTracks = 10,
             uri = "spotify:album:$id",

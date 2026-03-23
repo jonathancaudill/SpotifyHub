@@ -2,12 +2,14 @@ package com.spotifyhub.ui.detail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.spotifyhub.browse.model.BrowseItem
 import com.spotifyhub.library.LibraryRepository
 import com.spotifyhub.library.model.TrackItem
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 data class DetailUiState(
     val title: String = "",
@@ -23,11 +25,13 @@ data class DetailUiState(
 class DetailViewModel(
     private val libraryRepository: LibraryRepository,
 ) : ViewModel() {
+    private val playlistUnavailableMessage =
+        "Track list unavailable from Spotify's API for this playlist. Tap Play to start it on your active device."
 
     private val _uiState = MutableStateFlow(DetailUiState())
     val uiState: StateFlow<DetailUiState> = _uiState.asStateFlow()
 
-    fun loadPlaylist(playlistId: String) {
+    fun loadPlaylist(playlistId: String, fallbackItem: BrowseItem? = null) {
         viewModelScope.launch {
             _uiState.value = DetailUiState(isLoading = true)
             runCatching {
@@ -43,11 +47,18 @@ class DetailViewModel(
                         tracks = detail.tracks,
                         isLoading = false,
                     )
+                } else if (fallbackItem != null) {
+                    _uiState.value = buildFallbackPlaylistState(fallbackItem)
                 } else {
                     _uiState.value = DetailUiState(isLoading = false, error = "Playlist not found")
                 }
             }.onFailure { e ->
-                _uiState.value = DetailUiState(isLoading = false, error = e.message)
+                val fallback = fallbackItem
+                if (fallback != null && shouldUsePlaylistFallback(e, fallback)) {
+                    _uiState.value = buildFallbackPlaylistState(fallback)
+                } else {
+                    _uiState.value = DetailUiState(isLoading = false, error = e.message)
+                }
             }
         }
     }
@@ -102,5 +113,25 @@ class DetailViewModel(
 
     fun playFromStart() {
         playContext(trackOffset = 0)
+    }
+
+    private fun shouldUsePlaylistFallback(error: Throwable, fallbackItem: BrowseItem): Boolean {
+        if (fallbackItem.uri.isBlank()) {
+            return false
+        }
+        val httpError = error as? HttpException ?: return false
+        return httpError.code() == 403 || httpError.code() == 404
+    }
+
+    private fun buildFallbackPlaylistState(item: BrowseItem): DetailUiState {
+        return DetailUiState(
+            title = item.title,
+            subtitle = item.subtitle,
+            description = playlistUnavailableMessage,
+            artworkUrl = item.artworkUrl,
+            uri = item.uri,
+            tracks = emptyList(),
+            isLoading = false,
+        )
     }
 }

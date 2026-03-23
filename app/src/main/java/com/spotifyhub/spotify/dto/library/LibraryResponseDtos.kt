@@ -40,6 +40,7 @@ data class SavedTrackDto(
 data class PlaylistTrackDto(
     @param:Json(name = "added_at") val addedAt: String? = null,
     val track: TrackDto? = null,
+    val item: TrackDto? = null,
 )
 
 /* ── Paging wrappers ─────────────────────────────────────────────── */
@@ -90,6 +91,7 @@ data class FullPlaylistDto(
     val images: List<ImageDto> ? = null,
     val owner: PlaylistOwnerDto? = null,
     val uri: String? = null,
+    val items: PlaylistTrackPagingDto? = null,
     val tracks: PlaylistTrackPagingDto? = null,
 )
 

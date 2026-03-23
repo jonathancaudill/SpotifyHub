@@ -11,6 +11,7 @@ import com.spotifyhub.rating.SheetsRepository
 import com.spotifyhub.search.SearchRepository
 import com.spotifyhub.spotify.api.SpotifyAccountsApi
 import com.spotifyhub.spotify.api.SpotifyBrowseApi
+import com.spotifyhub.spotify.api.SpotifyEmbedApi
 import com.spotifyhub.spotify.api.SpotifyLibraryApi
 import com.spotifyhub.spotify.api.SpotifyNetworkModule
 import com.spotifyhub.spotify.api.SpotifyPlayerApi
@@ -19,12 +20,17 @@ import com.spotifyhub.system.input.InputRouter
 import com.spotifyhub.system.network.ConnectivityMonitor
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import com.spotifyhub.ui.main.MainTab
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableSharedFlow
 
 class AppGraph(private val appContext: Context) {
     val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Shared flow so HomeViewModel can observe when the Home tab is (re-)selected. */
+    val tabSelectedEvent = MutableSharedFlow<MainTab>(extraBufferCapacity = 1)
 
     val moshi: Moshi by lazy {
         Moshi.Builder()
@@ -76,6 +82,10 @@ class AppGraph(private val appContext: Context) {
         )
     }
 
+    val embedApi: SpotifyEmbedApi by lazy {
+        SpotifyNetworkModule.createEmbedApi(moshi)
+    }
+
     val playbackRepository: PlaybackRepository by lazy {
         PlaybackRepository(
             appScope = applicationScope,
@@ -86,7 +96,12 @@ class AppGraph(private val appContext: Context) {
     }
 
     val browseRepository: BrowseRepository by lazy {
-        BrowseRepository(browseApi = browseApi)
+        BrowseRepository(
+            browseApi = browseApi,
+            libraryApi = libraryApi,
+            searchApi = searchApi,
+            embedApi = embedApi,
+        )
     }
 
     val searchRepository: SearchRepository by lazy {

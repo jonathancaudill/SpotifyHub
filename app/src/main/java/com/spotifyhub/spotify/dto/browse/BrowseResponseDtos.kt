@@ -130,3 +130,29 @@ data class PlaylistOwnerDto(
 data class PlaylistTracksRefDto(
     val total: Int? = null,
 )
+
+/* ── Browse Categories ─────────────────────────────────────────── */
+
+@JsonClass(generateAdapter = true)
+data class CategoriesResponseDto(
+    val categories: CategoryPagingDto? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class CategoryPagingDto(
+    val items: List<CategoryDto>? = null,
+    val total: Int? = null,
+    val next: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class CategoryDto(
+    val id: String? = null,
+    val name: String? = null,
+    val icons: List<ImageDto>? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class CategoryPlaylistsResponseDto(
+    val playlists: PlaylistPagingDto? = null,
+)

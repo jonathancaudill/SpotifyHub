@@ -61,7 +61,7 @@ interface SpotifyLibraryApi {
         @Path("id") playlistId: String,
     ): FullPlaylistDto
 
-    @GET("v1/playlists/{id}/tracks")
+    @GET("v1/playlists/{id}/items")
     suspend fun getPlaylistTracks(
         @Path("id") playlistId: String,
         @Query("limit") limit: Int = 50,

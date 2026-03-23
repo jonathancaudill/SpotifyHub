@@ -2,8 +2,9 @@ package com.spotifyhub.ui.main
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -17,7 +18,9 @@ enum class MainTab {
     NowPlaying,
 }
 
-class MainViewModel : ViewModel() {
+class MainViewModel(
+    private val tabSelectedEvent: MutableSharedFlow<MainTab>,
+) : ViewModel() {
     private val _selectedTab = MutableStateFlow(MainTab.NowPlaying)
     val selectedTab: StateFlow<MainTab> = _selectedTab.asStateFlow()
 
@@ -32,6 +35,7 @@ class MainViewModel : ViewModel() {
 
     fun selectTab(tab: MainTab) {
         _selectedTab.value = tab
+        tabSelectedEvent.tryEmit(tab)
     }
 
     fun openDetail() {

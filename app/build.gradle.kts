@@ -19,6 +19,12 @@ android {
 
         val sheetsScriptUrl = providers.gradleProperty("SHEETS_SCRIPT_URL").orElse("").get()
         buildConfigField("String", "SHEETS_SCRIPT_URL", "\"$sheetsScriptUrl\"")
+
+        val spotifyHomeDiscoverReleaseIds = providers.gradleProperty("SPOTIFY_HOME_DISCOVER_RELEASE_IDS").orElse("").get()
+        buildConfigField("String", "SPOTIFY_HOME_DISCOVER_RELEASE_IDS", "\"$spotifyHomeDiscoverReleaseIds\"")
+
+        val spotifyHomeDailyMixIds = providers.gradleProperty("SPOTIFY_HOME_DAILY_MIX_IDS").orElse("").get()
+        buildConfigField("String", "SPOTIFY_HOME_DAILY_MIX_IDS", "\"$spotifyHomeDailyMixIds\"")
     }
 
     buildTypes {
@@ -80,6 +86,8 @@ dependencies {
     implementation(libs.moshi.kotlin)
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.cupertino)
+    implementation(libs.cupertino.icons.extended)
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")

@@ -1,5 +1,7 @@
 package com.spotifyhub.spotify.api
 
+import com.spotifyhub.spotify.dto.browse.CategoriesResponseDto
+import com.spotifyhub.spotify.dto.browse.CategoryPlaylistsResponseDto
 import com.spotifyhub.spotify.dto.browse.FeaturedPlaylistsResponseDto
 import com.spotifyhub.spotify.dto.browse.PlaylistPagingDto
 import com.spotifyhub.spotify.dto.browse.RecentlyPlayedResponseDto
@@ -8,6 +10,7 @@ import com.spotifyhub.spotify.dto.browse.TopArtistsResponseDto
 import com.spotifyhub.spotify.dto.browse.TopTracksResponseDto
 import com.spotifyhub.spotify.dto.browse.UserProfileDto
 import retrofit2.http.GET
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface SpotifyBrowseApi {
@@ -49,4 +52,17 @@ interface SpotifyBrowseApi {
 
     @GET("v1/me")
     suspend fun getCurrentUserProfile(): UserProfileDto
+
+    @GET("v1/browse/categories")
+    suspend fun getCategories(
+        @Query("limit") limit: Int = 20,
+        @Query("offset") offset: Int = 0,
+        @Query("locale") locale: String? = null,
+    ): CategoriesResponseDto
+
+    @GET("v1/browse/categories/{categoryId}/playlists")
+    suspend fun getCategoryPlaylists(
+        @Path("categoryId") categoryId: String,
+        @Query("limit") limit: Int = 20,
+    ): CategoryPlaylistsResponseDto
 }

@@ -66,4 +66,13 @@ object SpotifyNetworkModule {
         return createAuthenticatedRetrofit(moshi, authRepository)
             .create(SpotifySearchApi::class.java)
     }
+
+    fun createEmbedApi(moshi: Moshi): SpotifyEmbedApi {
+        return Retrofit.Builder()
+            .baseUrl("https://open.spotify.com/")
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .client(OkHttpClient.Builder().build())
+            .build()
+            .create(SpotifyEmbedApi::class.java)
+    }
 }

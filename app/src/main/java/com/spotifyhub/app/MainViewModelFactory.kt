@@ -34,11 +34,11 @@ class MainViewModelFactory(
             }
 
             modelClass.isAssignableFrom(MainViewModel::class.java) -> {
-                MainViewModel() as T
+                MainViewModel(appGraph.tabSelectedEvent) as T
             }
 
             modelClass.isAssignableFrom(HomeViewModel::class.java) -> {
-                HomeViewModel(appGraph.browseRepository) as T
+                HomeViewModel(appGraph.browseRepository, appGraph.tabSelectedEvent) as T
             }
 
             modelClass.isAssignableFrom(SearchViewModel::class.java) -> {

@@ -20,7 +20,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +43,7 @@ import coil.request.ImageRequest
 import com.spotifyhub.library.model.TrackItem
 import com.spotifyhub.ui.common.NowPlayingIndicator
 import com.spotifyhub.ui.common.bounceOverscroll
+import com.spotifyhub.ui.icons.AppIcons
 
 private val BrowseBackground = Color(0xFF171A1F)
 private val SpotifyGreen = Color(0xFF1ED760)
@@ -223,7 +223,7 @@ private fun DetailHeader(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.PlayArrow,
+                        imageVector = AppIcons.play,
                         contentDescription = "Play",
                         tint = Color.Black,
                         modifier = Modifier.size(18.dp),

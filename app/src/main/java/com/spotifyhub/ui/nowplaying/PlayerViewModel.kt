@@ -76,4 +76,8 @@ class PlayerViewModel(
     fun seekTo(positionMs: Long) {
         playbackRepository.seekTo(positionMs)
     }
+
+    fun seekBy(deltaMs: Long) {
+        playbackRepository.seekBy(deltaMs)
+    }
 }
