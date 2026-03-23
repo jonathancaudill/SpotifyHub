@@ -7,7 +7,7 @@ A dedicated Android music controller for Spotify, designed to turn landscape dis
 - **Now Playing Dashboard** — Large album art, track metadata, and playback controls in a landscape-optimized layout
 - **Sidebar Navigation Shell** — Persistent glass rail with Home, Search, Library, Rate, and Now Playing tabs
 - **Browse + Library Views** — Home recommendations, search results, saved library lists, and playlist/album detail pages
-- **Album Rating Tab** — Rate the currently playing album (0.0–10.0) with a touch-draggable scroll wheel. Ratings are submitted to a Google Sheet via Apps Script. Albums with existing ratings are automatically detected and locked
+- **Album Rating Tab** — Rate the currently playing album (0.0–10.0) with a touch-draggable circular dial. Ratings are submitted to a Google Sheet via Apps Script, existing ratings are detected and locked, and album art can be written into the sheet as an `IMAGE(...)` formula
 - **Swipe-Over Detail Pages** — Library and browse details stay scoped to their owning tab instead of replacing the global screen
 - **Shader-Driven Backdrop** — Real-time OpenGL ES 2.0 album art distortion with multi-pass Kawase blur, smooth crossfades between tracks
 - **Full Playback Control** — Play/pause, skip, shuffle, repeat, volume, seek (draggable progress bar), and library save/unsave
@@ -32,7 +32,7 @@ PlayerViewModel / LibraryViewModel / HomeViewModel / SearchViewModel / DetailVie
 MainScreen                                  ← Sidebar shell + tab container
   ├── persistent AlbumBackdropHost          ← Always-mounted GLSurfaceView for warm shader transitions
   ├── Home / Search / Library content pages
-  ├── RatingScreen                          ← Album rating with scroll wheel + Google Sheets sync
+  ├── RatingScreen                          ← Album rating with circular drag dial + Google Sheets sync
   ├── tab-scoped swipe-over detail sheet
   └── NowPlayingContent                     ← Track metadata, transport, seek, utility controls
 ```
@@ -72,7 +72,7 @@ app/src/main/java/com/spotifyhub/
     ├── main/             # Main shell, sidebar, tab navigation
     ├── nowplaying/       # Now Playing screen, PlayerViewModel
     │   └── backdrop/     # OpenGL renderer, shaders, bitmap controller
-    ├── rating/           # Rating tab (scroll wheel, album info, submit)
+    ├── rating/           # Rating tab (circular dial, album info, submit)
     ├── root/             # Root auth/main routing
     └── search/           # Search tab
 
@@ -81,6 +81,14 @@ app/src/main/assets/shaders/
 ├── album_backdrop_scene.frag     # Scene shader (twisted art copies, compositing)
 └── album_backdrop_blur.frag      # Kawase blur (9-tap, multi-pass, saturation boost)
 ```
+
+## Recent Changes Since The Last README Update
+
+- Replaced the rating tab's vertical scroll wheel with a thermostat-style circular drag dial and rebalanced the layout so album art, metadata, lock state, and submit action fit more cleanly in landscape
+- Fixed Google Apps Script submission reliability by manually following the script redirect flow and increasing network timeouts to tolerate Apps Script cold starts
+- Updated Google Sheets payloads so submitted album art can render directly in the sheet through an `IMAGE(...)` formula
+- Hardened Spotify search mapping against `null` items in API paging responses to avoid search result parsing failures
+- Expanded Spotify auth scopes to include `user-top-read` and `user-read-private`
 
 ## Getting Started
 
@@ -117,6 +125,7 @@ To enable the album rating tab:
 2. Paste the contents of `google-apps-script/Code.gs`
 3. **Deploy → New deployment → Web app** → Execute as "Me", Access "Anyone"
 4. Copy the deployment URL and set it as `SHEETS_SCRIPT_URL` in your Gradle properties
+5. Expect the deployed Apps Script endpoint to issue a redirect before returning JSON; SpotifyHub now follows that flow explicitly and uses longer timeouts to handle cold starts
 
 ### Fonts
 
@@ -182,6 +191,8 @@ user-library-modify
 playlist-read-private
 playlist-read-collaborative
 user-read-recently-played
+user-top-read
+user-read-private
 ```
 
 ## Authentication Flow

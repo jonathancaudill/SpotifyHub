@@ -168,84 +168,95 @@ private fun RatingContent(
     Row(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .padding(horizontal = 24.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(24.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        /* Left: album artwork */
-        AlbumArtwork(
-            artworkUrl = item.artworkUrl,
-            title = item.album,
-            modifier = Modifier
-                .fillMaxHeight()
-                .aspectRatio(1f),
-        )
-
-        /* Center: metadata + submit */
+        /* Left column: album art + metadata + submit button */
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight(),
             verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = item.artist,
-                color = Color.White.copy(alpha = 0.85f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Medium,
-                ),
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Text(
-                text = item.album,
-                color = Color.White,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    fontSize = 26.sp,
-                    fontWeight = FontWeight.Bold,
-                ),
-            )
-
-            item.releaseDate?.takeIf { it.isNotBlank() }?.let { date ->
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = date,
-                    color = Color.White.copy(alpha = 0.45f),
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        letterSpacing = 0.5.sp,
-                    ),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                /* Small album art */
+                AlbumArtwork(
+                    artworkUrl = item.artworkUrl,
+                    title = item.album,
+                    modifier = Modifier.size(110.dp),
                 )
-            }
 
-            if (isLocked) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                /* Metadata beside art */
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center,
                 ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Lock,
-                        contentDescription = "Already rated",
-                        modifier = Modifier.size(14.dp),
-                        tint = LockedGold,
-                    )
                     Text(
-                        text = "Already rated",
-                        color = LockedGold,
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.SemiBold,
+                        text = item.artist,
+                        color = Color.White.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Medium,
                         ),
                     )
+
+                    Spacer(modifier = Modifier.height(3.dp))
+
+                    Text(
+                        text = item.album,
+                        color = Color.White,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    )
+
+                    item.releaseDate?.takeIf { it.isNotBlank() }?.let { date ->
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = date,
+                            color = Color.White.copy(alpha = 0.45f),
+                            style = MaterialTheme.typography.bodySmall.copy(
+                                letterSpacing = 0.5.sp,
+                            ),
+                        )
+                    }
+
+                    if (isLocked) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Lock,
+                                contentDescription = "Already rated",
+                                modifier = Modifier.size(12.dp),
+                                tint = LockedGold,
+                            )
+                            Text(
+                                text = "Already rated",
+                                color = LockedGold,
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                ),
+                            )
+                        }
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             SubmitButton(
                 submissionState = submissionState,
@@ -256,17 +267,24 @@ private fun RatingContent(
             )
         }
 
-        /* Right: circular drag dial */
-        RatingDial(
-            value = selectedRating,
-            isLocked = isLocked,
-            isLookingUp = isLookingUp,
-            onValueChanged = onRatingChanged,
+        /* Right: circular drag dial — use weight so it doesn't steal all width */
+        Box(
             modifier = Modifier
-                .fillMaxHeight()
-                .aspectRatio(1f)
-                .padding(8.dp),
-        )
+                .weight(0.7f)
+                .fillMaxHeight(),
+            contentAlignment = Alignment.Center,
+        ) {
+            RatingDial(
+                value = selectedRating,
+                isLocked = isLocked,
+                isLookingUp = isLookingUp,
+                onValueChanged = onRatingChanged,
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .aspectRatio(1f)
+                    .padding(4.dp),
+            )
+        }
     }
 }
 

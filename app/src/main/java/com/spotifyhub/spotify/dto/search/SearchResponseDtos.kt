@@ -20,7 +20,7 @@ data class SearchResponseDto(
 
 @JsonClass(generateAdapter = true)
 data class TrackPagingDto(
-    val items: List<TrackDto> ? = null,
+    val items: List<TrackDto?> ? = null,
     val total: Int? = null,
     val limit: Int? = null,
     val offset: Int? = null,
@@ -29,7 +29,7 @@ data class TrackPagingDto(
 
 @JsonClass(generateAdapter = true)
 data class AlbumPagingDto(
-    val items: List<SimplifiedAlbumDto> ? = null,
+    val items: List<SimplifiedAlbumDto?> ? = null,
     val total: Int? = null,
     val limit: Int? = null,
     val offset: Int? = null,
@@ -38,7 +38,7 @@ data class AlbumPagingDto(
 
 @JsonClass(generateAdapter = true)
 data class ArtistPagingDto(
-    val items: List<ArtistFullDto> ? = null,
+    val items: List<ArtistFullDto?> ? = null,
     val total: Int? = null,
     val limit: Int? = null,
     val offset: Int? = null,
@@ -47,7 +47,7 @@ data class ArtistPagingDto(
 
 @JsonClass(generateAdapter = true)
 data class PlaylistPagingDto(
-    val items: List<SimplifiedPlaylistDto> ? = null,
+    val items: List<SimplifiedPlaylistDto?> ? = null,
     val total: Int? = null,
     val limit: Int? = null,
     val offset: Int? = null,

@@ -10,10 +10,10 @@ object SearchMapper {
 
     fun map(dto: SearchResponseDto): SearchResults {
         return SearchResults(
-            tracks = dto.tracks?.items.orEmpty().mapNotNull { BrowseMapper.mapTrackToBrowseItem(it) },
-            albums = dto.albums?.items.orEmpty().mapNotNull { mapAlbumToBrowseItem(it) },
-            artists = dto.artists?.items.orEmpty().mapNotNull { BrowseMapper.mapArtistToBrowseItem(it) },
-            playlists = dto.playlists?.items.orEmpty().mapNotNull { BrowseMapper.mapPlaylistToBrowseItem(it) },
+            tracks = dto.tracks?.items.orEmpty().filterNotNull().mapNotNull { BrowseMapper.mapTrackToBrowseItem(it) },
+            albums = dto.albums?.items.orEmpty().filterNotNull().mapNotNull { mapAlbumToBrowseItem(it) },
+            artists = dto.artists?.items.orEmpty().filterNotNull().mapNotNull { BrowseMapper.mapArtistToBrowseItem(it) },
+            playlists = dto.playlists?.items.orEmpty().filterNotNull().mapNotNull { BrowseMapper.mapPlaylistToBrowseItem(it) },
         )
     }
 

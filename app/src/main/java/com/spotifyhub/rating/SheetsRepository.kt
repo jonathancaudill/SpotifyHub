@@ -98,9 +98,15 @@ class SheetsRepository {
     }
 
     /**
-     * Execute a request, manually following any 3xx redirects while
-     * preserving the original HTTP method and body.  This is critical
-     * for Google Apps Script which 302-redirects POSTs.
+     * Execute a request, manually following any 3xx redirects.
+     *
+     * Google Apps Script flow:
+     *   1. POST/GET to script.google.com  → script executes, returns 302
+     *   2. 302 Location points to script.googleusercontent.com which
+     *      serves the JSON response — but it only accepts GET.
+     *
+     * So on redirect we always switch to GET (drop the body).  This
+     * matches standard browser behaviour for 302/303 redirects.
      */
     private fun executeFollowingRedirects(originalRequest: Request): String {
         var request = originalRequest
@@ -118,9 +124,11 @@ class SheetsRepository {
                     error("Too many redirects ($maxRedirects)")
                 }
 
-                // Rebuild request to the new URL, preserving method + body
-                request = request.newBuilder()
+                // Follow redirect as GET — the script has already executed,
+                // the redirect target only serves the response via GET.
+                request = Request.Builder()
                     .url(location)
+                    .get()
                     .build()
                 continue
             }
@@ -150,7 +158,12 @@ class SheetsRepository {
 
         return buildString {
             append('{')
-            append("\"albumCover\":\"${(albumCover.orEmpty()).jsonEscape()}\",")
+            val imageFormula = if (!albumCover.isNullOrEmpty()) {
+                "=IMAGE(\"${albumCover.jsonEscape()}\")"
+            } else {
+                ""
+            }
+            append("\"albumCover\":\"${imageFormula.jsonEscape()}\",")
             append("\"artistName\":\"${artistName.jsonEscape()}\",")
             append("\"title\":\"${title.jsonEscape()}\",")
             append("\"releaseDate\":\"${(releaseDate.orEmpty()).jsonEscape()}\",")
