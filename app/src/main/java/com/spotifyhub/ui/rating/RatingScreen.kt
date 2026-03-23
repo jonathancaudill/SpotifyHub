@@ -3,10 +3,11 @@ package com.spotifyhub.ui.rating
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,31 +31,38 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.spotifyhub.playback.model.PlaybackItem
-import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 /* ── Design tokens ───────────────────────────────────────────────── */
 
@@ -65,6 +72,8 @@ private val CardBorder = Color.White.copy(alpha = 0.08f)
 private val SurfaceShadow = Color.Black.copy(alpha = 0.20f)
 private val SpotifyGreen = Color(0xFF1ED760)
 private val LockedGold = Color(0xFFD4A843)
+
+private val TrackColorInactive = Color.White.copy(alpha = 0.10f)
 
 /* ── Public entry-point ──────────────────────────────────────────── */
 
@@ -247,15 +256,16 @@ private fun RatingContent(
             )
         }
 
-        /* Right: rating wheel */
-        RatingWheel(
+        /* Right: circular drag dial */
+        RatingDial(
             value = selectedRating,
             isLocked = isLocked,
             isLookingUp = isLookingUp,
             onValueChanged = onRatingChanged,
             modifier = Modifier
                 .fillMaxHeight()
-                .width(100.dp),
+                .aspectRatio(1f)
+                .padding(8.dp),
         )
     }
 }
@@ -327,10 +337,17 @@ private fun ArtworkPlaceholder() {
     }
 }
 
-/* ── Rating wheel ────────────────────────────────────────────────── */
+/* ── Circular drag dial (thermostat-style) ───────────────────────── */
+
+/**
+ * Arc spans 270 degrees: from 135° (bottom-left) clockwise to 45° (bottom-right).
+ * The gap is at the bottom.  0.0 = left end, 10.0 = right end.
+ */
+private const val ARC_START_ANGLE = 135f
+private const val ARC_SWEEP = 270f
 
 @Composable
-private fun RatingWheel(
+private fun RatingDial(
     value: Float,
     isLocked: Boolean,
     isLookingUp: Boolean,
@@ -338,38 +355,56 @@ private fun RatingWheel(
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
-    var accumulatedDrag by remember { mutableFloatStateOf(0f) }
+    var componentSize by remember { mutableStateOf(IntSize.Zero) }
 
-    // The number of visible "notches" above and below center
-    val visibleNotches = 5
+    val fraction = (value / 10f).coerceIn(0f, 1f)
+    val animatedFraction by animateFloatAsState(
+        targetValue = fraction,
+        animationSpec = tween(durationMillis = 80),
+        label = "dial-fraction",
+    )
+
+    val activeColor = if (isLocked) LockedGold else SpotifyGreen
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(CardSurface)
-            .border(1.dp, CardBorder, RoundedCornerShape(20.dp))
+            .onSizeChanged { componentSize = it }
             .then(
                 if (!isLocked && !isLookingUp) {
                     Modifier.pointerInput(Unit) {
-                        detectVerticalDragGestures(
-                            onDragStart = { accumulatedDrag = 0f },
-                            onVerticalDrag = { _, dragAmount ->
-                                accumulatedDrag += dragAmount
-                                // Each 18px of drag = 0.1 increment
-                                val steps = (accumulatedDrag / 18f).toInt()
-                                if (steps != 0) {
-                                    accumulatedDrag -= steps * 18f
-                                    // Drag up (negative) = increase, drag down = decrease
-                                    val newValue = (value - steps * 0.1f)
-                                        .coerceIn(0f, 10f)
-                                        .let { (it * 10).roundToInt() / 10f }
-                                    if (newValue != value) {
-                                        onValueChanged(newValue)
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    }
-                                }
-                            },
-                        )
+                        detectDragGestures { change, _ ->
+                            change.consume()
+                            val cx = componentSize.width / 2f
+                            val cy = componentSize.height / 2f
+                            val dx = change.position.x - cx
+                            val dy = change.position.y - cy
+
+                            // atan2 gives angle from positive-x axis, in degrees
+                            var angleDeg = Math
+                                .toDegrees(atan2(dy.toDouble(), dx.toDouble()))
+                                .toFloat()
+                            if (angleDeg < 0f) angleDeg += 360f
+
+                            // Map angle to fraction along our 270° arc starting at 135°
+                            var relativeAngle = angleDeg - ARC_START_ANGLE
+                            if (relativeAngle < 0f) relativeAngle += 360f
+
+                            // If in the 90° dead zone at the bottom, snap to nearest end
+                            val newFraction = when {
+                                relativeAngle <= ARC_SWEEP -> relativeAngle / ARC_SWEEP
+                                relativeAngle > ARC_SWEEP + (360f - ARC_SWEEP) / 2f -> 0f
+                                else -> 1f
+                            }.coerceIn(0f, 1f)
+
+                            // Snap to 0.1 increments
+                            val snapped = ((newFraction * 100f).roundToInt() / 10f)
+                                .coerceIn(0f, 10f)
+
+                            if (snapped != value) {
+                                onValueChanged(snapped)
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                        }
                     }
                 } else {
                     Modifier
@@ -377,6 +412,62 @@ private fun RatingWheel(
             ),
         contentAlignment = Alignment.Center,
     ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val strokeWidth = size.minDimension * 0.09f
+            val pad = strokeWidth / 2f + 4f
+            val arcSize = Size(size.width - pad * 2, size.height - pad * 2)
+            val topLeft = Offset(pad, pad)
+
+            // Background track
+            drawArc(
+                color = TrackColorInactive,
+                startAngle = ARC_START_ANGLE,
+                sweepAngle = ARC_SWEEP,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+            )
+
+            // Filled arc
+            if (animatedFraction > 0f) {
+                drawArc(
+                    color = activeColor,
+                    startAngle = ARC_START_ANGLE,
+                    sweepAngle = ARC_SWEEP * animatedFraction,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+                )
+            }
+
+            // Thumb dot at current position
+            val thumbAngleRad = Math.toRadians(
+                (ARC_START_ANGLE + ARC_SWEEP * animatedFraction).toDouble(),
+            )
+            val radius = arcSize.width / 2f
+            val center = Offset(
+                topLeft.x + arcSize.width / 2f,
+                topLeft.y + arcSize.height / 2f,
+            )
+            val thumbPos = Offset(
+                center.x + radius * cos(thumbAngleRad).toFloat(),
+                center.y + radius * sin(thumbAngleRad).toFloat(),
+            )
+            drawCircle(
+                color = Color.White,
+                radius = strokeWidth * 0.72f,
+                center = thumbPos,
+            )
+            drawCircle(
+                color = activeColor,
+                radius = strokeWidth * 0.46f,
+                center = thumbPos,
+            )
+        }
+
+        // Center label
         if (isLookingUp) {
             CircularProgressIndicator(
                 color = Color.White.copy(alpha = 0.6f),
@@ -384,140 +475,26 @@ private fun RatingWheel(
                 modifier = Modifier.size(28.dp),
             )
         } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                // Show notches above center
-                for (i in visibleNotches downTo 1) {
-                    val notchValue = value + i * 0.1f
-                    if (notchValue in 0f..10f) {
-                        WheelNotch(
-                            displayValue = notchValue,
-                            distanceFromCenter = i,
-                            isLocked = isLocked,
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-                }
-
-                // Center value — the selected one
-                CenterValue(
-                    value = value,
-                    isLocked = isLocked,
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = String.format("%.1f", value),
+                    color = if (isLocked) LockedGold else Color.White,
+                    style = MaterialTheme.typography.displaySmall.copy(
+                        fontSize = 38.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
                 )
-
-                // Show notches below center
-                for (i in 1..visibleNotches) {
-                    val notchValue = value - i * 0.1f
-                    if (notchValue in 0f..10f) {
-                        WheelNotch(
-                            displayValue = notchValue,
-                            distanceFromCenter = i,
-                            isLocked = isLocked,
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.height(16.dp))
-                    }
-                }
+                Text(
+                    text = "/ 10",
+                    color = Color.White.copy(alpha = 0.35f),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Medium,
+                        letterSpacing = 1.sp,
+                    ),
+                )
             }
-
-            // Fade edges
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0f to Color(0xFF161A22),
-                            0.25f to Color.Transparent,
-                            0.75f to Color.Transparent,
-                            1f to Color(0xFF161A22),
-                        ),
-                    ),
-            )
-
-            // Center highlight line
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .align(Alignment.Center)
-                    .graphicsLayer { translationY = -20f }
-                    .background(
-                        if (isLocked) LockedGold.copy(alpha = 0.3f)
-                        else Color.White.copy(alpha = 0.12f),
-                    ),
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .align(Alignment.Center)
-                    .graphicsLayer { translationY = 20f }
-                    .background(
-                        if (isLocked) LockedGold.copy(alpha = 0.3f)
-                        else Color.White.copy(alpha = 0.12f),
-                    ),
-            )
         }
     }
-}
-
-@Composable
-private fun CenterValue(
-    value: Float,
-    isLocked: Boolean,
-) {
-    val color = if (isLocked) LockedGold else Color.White
-
-    Text(
-        text = String.format("%.1f", value),
-        color = color,
-        style = MaterialTheme.typography.headlineMedium.copy(
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-        ),
-        modifier = Modifier.padding(vertical = 2.dp),
-    )
-}
-
-@Composable
-private fun WheelNotch(
-    displayValue: Float,
-    distanceFromCenter: Int,
-    isLocked: Boolean,
-) {
-    val alpha by animateFloatAsState(
-        targetValue = when {
-            distanceFromCenter <= 1 -> 0.50f
-            distanceFromCenter <= 2 -> 0.35f
-            distanceFromCenter <= 3 -> 0.20f
-            else -> 0.10f
-        },
-        animationSpec = tween(durationMillis = 100),
-        label = "notch-alpha",
-    )
-    val fontSize = when {
-        distanceFromCenter <= 1 -> 14.sp
-        distanceFromCenter <= 2 -> 12.sp
-        else -> 10.sp
-    }
-
-    val color = if (isLocked) LockedGold else Color.White
-
-    Text(
-        text = String.format("%.1f", displayValue),
-        color = color.copy(alpha = alpha),
-        style = MaterialTheme.typography.bodySmall.copy(
-            fontSize = fontSize,
-            fontWeight = FontWeight.Medium,
-        ),
-        modifier = Modifier.padding(vertical = 1.dp),
-    )
 }
 
 /* ── Submit button ───────────────────────────────────────────────── */
