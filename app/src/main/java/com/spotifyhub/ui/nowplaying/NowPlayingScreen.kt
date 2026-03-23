@@ -218,9 +218,9 @@ fun NowPlayingContent(
             playback = playback,
             isBusy = uiState.isRefreshing,
             isCurrentItemSaved = uiState.isCurrentItemSaved == true,
-            transportEnabled = playback?.item != null && !uiState.isSendingCommand,
-            saveEnabled = playback?.item != null && !uiState.isSendingCommand,
-            utilityEnabled = playback?.device != null && !uiState.isSendingCommand,
+            transportEnabled = playback?.item != null,
+            saveEnabled = playback?.item != null,
+            utilityEnabled = playback?.device != null,
             onSkipPrevious = viewModel::skipPrevious,
             onSeekBackward = { viewModel.seekBy(-15_000L) },
             onTogglePlayback = viewModel::togglePlayback,
@@ -351,9 +351,9 @@ fun NowPlayingScreen(
                 playback = playback,
                 isBusy = uiState.isRefreshing,
                 isCurrentItemSaved = uiState.isCurrentItemSaved == true,
-                transportEnabled = playback?.item != null && !uiState.isSendingCommand,
-                saveEnabled = playback?.item != null && !uiState.isSendingCommand,
-                utilityEnabled = playback?.device != null && !uiState.isSendingCommand,
+                transportEnabled = playback?.item != null,
+                saveEnabled = playback?.item != null,
+                utilityEnabled = playback?.device != null,
                 onSkipPrevious = onSkipPrevious,
                 onSeekBackward = onSeekBackward,
                 onTogglePlayback = onTogglePlayback,
@@ -381,7 +381,6 @@ private fun SidebarRail(
     Box(
         modifier = modifier
             .width(62.dp)
-            .shadow(16.dp, SidebarShape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
             .clip(SidebarShape)
             .background(SidebarSurface)
             .border(1.dp, SidebarBorder, SidebarShape),
@@ -402,35 +401,6 @@ private fun SidebarRail(
                 ),
                 color = Color.White,
             )
-
-            /* Center: Spotify logo */
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(SpotifyGreen),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "S",
-                        color = Color(0xFF08110B),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
-                    )
-                }
-
-                Text(
-                    text = if (isOffline) "OFF" else "LIVE",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp,
-                    ),
-                    color = if (isOffline) Color(0xFFFF8B8B) else SpotifyGreen,
-                )
-            }
 
             /* Bottom spacer to balance layout */
             Spacer(modifier = Modifier.height(16.dp))
@@ -470,55 +440,61 @@ private fun MainContent(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            /* Left: metadata stacked above transport */
+            /* Left: metadata above, transport pinned at bottom */
             Column(
-                modifier = Modifier.weight(0.58f),
+                modifier = Modifier
+                    .weight(0.58f)
+                    .fillMaxHeight(),
                 verticalArrangement = Arrangement.Center,
             ) {
                 val item = playback?.item
 
-                Text(
-                    text = item?.title ?: "Not Playing",
-                    color = Color.White,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.headlineLarge.copy(
-                        fontSize = 34.sp,
-                        lineHeight = 38.sp,
-                        fontWeight = FontWeight.Bold,
-                    ),
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                Text(
-                    text = item?.artist ?: "Connect to start listening",
-                    color = Color.White.copy(alpha = 0.85f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Medium,
-                    ),
-                )
-
-                item?.album?.takeIf { it.isNotBlank() }?.let { album ->
-                    Spacer(modifier = Modifier.height(4.dp))
+                /* Metadata — takes up available space, vertically centered */
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center,
+                ) {
                     Text(
-                        text = album,
-                        color = Color.White.copy(alpha = 0.50f),
-                        maxLines = 1,
+                        text = item?.title ?: "Not Playing",
+                        color = Color.White,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = 16.sp,
-                            letterSpacing = 0.3.sp,
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontSize = 34.sp,
+                            lineHeight = 38.sp,
+                            fontWeight = FontWeight.Bold,
                         ),
                     )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = item?.artist ?: "Connect to start listening",
+                        color = Color.White.copy(alpha = 0.85f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Medium,
+                        ),
+                    )
+
+                    item?.album?.takeIf { it.isNotBlank() }?.let { album ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = album,
+                            color = Color.White.copy(alpha = 0.50f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 16.sp,
+                                letterSpacing = 0.3.sp,
+                            ),
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                /* Transport controls — same column, below metadata */
+                /* Transport controls — pinned at bottom of left column */
                 TransportRow(
                     item = item,
                     isPlaying = playback?.isPlaying == true,
@@ -542,7 +518,7 @@ private fun MainContent(
             )
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(26.dp))
 
         /* Progress bar — full width */
         ProgressSection(playback = playback, onSeek = onSeek)
@@ -1069,7 +1045,6 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
                 ),
                 isCurrentItemSaved = false,
                 isRefreshing = false,
-                isSendingCommand = false,
             ),
             isOffline = false,
         ),
@@ -1102,7 +1077,6 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
                 ),
                 isCurrentItemSaved = true,
                 isRefreshing = false,
-                isSendingCommand = true,
             ),
             isOffline = true,
         ),
@@ -1112,7 +1086,6 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
                 playback = null,
                 isCurrentItemSaved = null,
                 isRefreshing = false,
-                isSendingCommand = false,
             ),
             isOffline = false,
         ),

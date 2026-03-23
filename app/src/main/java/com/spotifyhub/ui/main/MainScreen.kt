@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.LocalOverscrollFactory
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -67,7 +66,6 @@ private val SidebarShape = SquircleShape(24.dp)
 private val SidebarSurface = Color(0x2415181D)
 private val SidebarBorder = Color.White.copy(alpha = 0.08f)
 private val SurfaceShadow = Color.Black.copy(alpha = 0.20f)
-private val SpotifyGreen = Color(0xFF1ED760)
 private val BrowseBackdropStart = Color(0xFF132433)
 private val BrowseBackdropMid = Color(0xFF161A22)
 private val BrowseBackdropEnd = Color(0xFF101318)
@@ -320,7 +318,6 @@ private fun SidebarRail(
     Box(
         modifier = modifier
             .width(62.dp)
-            .shadow(16.dp, SidebarShape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
             .clip(SidebarShape)
             .background(SidebarSurface)
             .border(1.dp, SidebarBorder, SidebarShape),
@@ -383,35 +380,8 @@ private fun SidebarRail(
                 )
             }
 
-            /* Bottom: status */
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(SpotifyGreen),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "S",
-                        color = Color(0xFF08110B),
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Black),
-                    )
-                }
-
-                Text(
-                    text = if (isOffline) "OFF" else "LIVE",
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp,
-                        fontSize = 9.sp,
-                    ),
-                    color = if (isOffline) Color(0xFFFF8B8B) else SpotifyGreen,
-                )
-            }
+            /* Bottom spacer to balance layout */
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

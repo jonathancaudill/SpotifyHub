@@ -12,7 +12,6 @@ data class PlayerUiState(
     val playback: PlaybackSnapshot?,
     val isCurrentItemSaved: Boolean?,
     val isRefreshing: Boolean,
-    val isSendingCommand: Boolean,
 )
 
 class PlayerViewModel(
@@ -22,13 +21,11 @@ class PlayerViewModel(
         playbackRepository.playbackState,
         playbackRepository.currentItemSaved,
         playbackRepository.isRefreshing,
-        playbackRepository.isSendingCommand,
-    ) { playback, isCurrentItemSaved, isRefreshing, isSendingCommand ->
+    ) { playback, isCurrentItemSaved, isRefreshing ->
         PlayerUiState(
             playback = playback,
             isCurrentItemSaved = isCurrentItemSaved,
             isRefreshing = isRefreshing,
-            isSendingCommand = isSendingCommand,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -37,7 +34,6 @@ class PlayerViewModel(
             playback = null,
             isCurrentItemSaved = null,
             isRefreshing = true,
-            isSendingCommand = false,
         ),
     )
 
