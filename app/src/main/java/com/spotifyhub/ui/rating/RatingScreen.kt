@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import sv.lib.squircleshape.SquircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Lock
@@ -66,7 +66,7 @@ import kotlin.math.sin
 
 /* ── Design tokens ───────────────────────────────────────────────── */
 
-private val ArtworkShape = RoundedCornerShape(18.dp)
+private val ArtworkShape = SquircleShape(18.dp)
 private val CardSurface = Color(0x2415181D)
 private val CardBorder = Color.White.copy(alpha = 0.08f)
 private val SurfaceShadow = Color.Black.copy(alpha = 0.20f)
@@ -549,9 +549,9 @@ private fun SubmitButton(
         modifier = Modifier
             .fillMaxWidth(0.7f)
             .height(44.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .clip(SquircleShape(14.dp))
             .background(backgroundColor)
-            .border(1.dp, borderColor, RoundedCornerShape(14.dp))
+            .border(1.dp, borderColor, SquircleShape(14.dp))
             .then(
                 if (enabled) Modifier.clickable(onClick = onSubmit)
                 else Modifier,

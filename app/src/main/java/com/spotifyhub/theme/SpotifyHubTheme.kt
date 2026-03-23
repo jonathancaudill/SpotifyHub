@@ -3,6 +3,7 @@ package com.spotifyhub.theme
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -12,8 +13,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.spotifyhub.R
+import sv.lib.squircleshape.SquircleShape
 
 private val SfProText = FontFamily(
     Font(R.font.sf_pro_text_light, FontWeight.Light),
@@ -72,6 +75,14 @@ private val LightScheme = lightColorScheme(
     onSurface = Color(0xFF0A0E14),
 )
 
+private val HubShapes = Shapes(
+    extraSmall = SquircleShape(4.dp),
+    small = SquircleShape(8.dp),
+    medium = SquircleShape(12.dp),
+    large = SquircleShape(16.dp),
+    extraLarge = SquircleShape(28.dp),
+)
+
 @Composable
 fun SpotifyHubTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
@@ -81,6 +92,7 @@ fun SpotifyHubTheme(
     MaterialTheme(
         colorScheme = scheme,
         typography = SfProTypography,
+        shapes = HubShapes,
         content = content,
     )
 }

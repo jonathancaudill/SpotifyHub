@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
+import sv.lib.squircleshape.SquircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -95,7 +95,7 @@ private fun WaveBar(
         modifier = Modifier
             .width(3.dp)
             .fillMaxHeight(level.coerceIn(0.2f, 1f))
-            .clip(RoundedCornerShape(3.dp))
+            .clip(SquircleShape(3.dp))
             .background(color),
     )
 }

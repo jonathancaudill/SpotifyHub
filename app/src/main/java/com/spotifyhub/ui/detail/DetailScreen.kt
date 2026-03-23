@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.RoundedCornerShape
+import sv.lib.squircleshape.SquircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
@@ -100,7 +100,7 @@ fun DetailScreen(
                                 tint = Color.White,
                                 modifier = Modifier
                                     .size(32.dp)
-                                    .clip(RoundedCornerShape(16.dp))
+                                    .clip(SquircleShape(16.dp))
                                     .clickable(onClick = onBack)
                                     .padding(4.dp),
                             )
@@ -178,7 +178,7 @@ private fun DetailHeader(
                 contentDescription = title,
                 modifier = Modifier
                     .size(140.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .clip(SquircleShape(8.dp)),
                 contentScale = ContentScale.Crop,
             )
 
@@ -215,7 +215,7 @@ private fun DetailHeader(
                 /* Play button */
                 Row(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(24.dp))
+                        .clip(SquircleShape(24.dp))
                         .background(SpotifyGreen)
                         .clickable(onClick = onPlay)
                         .padding(horizontal = 20.dp, vertical = 10.dp),
@@ -265,7 +265,7 @@ private fun TrackRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(SquircleShape(10.dp))
             .background(if (isNowPlaying) SpotifyGreen.copy(alpha = 0.08f) else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),

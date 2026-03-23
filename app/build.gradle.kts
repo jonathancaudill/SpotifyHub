@@ -89,6 +89,14 @@ dependencies {
     implementation(libs.cupertino)
     implementation(libs.cupertino.icons.extended)
 
+    implementation(libs.squircle.shape.android) {
+        exclude(group = "org.jetbrains.compose.ui", module = "ui")
+        exclude(group = "org.jetbrains.compose.ui", module = "ui-util")
+        exclude(group = "org.jetbrains.compose.runtime")
+        exclude(group = "org.jetbrains.compose.foundation")
+        exclude(group = "org.jetbrains.compose.material3")
+    }
+
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 

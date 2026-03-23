@@ -21,7 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import sv.lib.squircleshape.SquircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,7 +48,7 @@ import com.spotifyhub.ui.common.bounceOverscroll
 
 private val BrowseBackground = Color(0xFF171A1F)
 private val SpotifyGreen = Color(0xFF1ED760)
-private val CardShape = RoundedCornerShape(8.dp)
+private val CardShape = SquircleShape(8.dp)
 
 @Composable
 fun HomeScreen(
@@ -168,7 +168,7 @@ private fun QuickAccessCard(
     Row(
         modifier = modifier
             .height(52.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .clip(SquircleShape(6.dp))
             .background(Color.White.copy(alpha = 0.08f))
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
@@ -181,7 +181,7 @@ private fun QuickAccessCard(
             contentDescription = item.title,
             modifier = Modifier
                 .size(52.dp)
-                .clip(RoundedCornerShape(topStart = 6.dp, bottomStart = 6.dp)),
+                .clip(SquircleShape(topStart = 6.dp, bottomStart = 6.dp)),
             contentScale = ContentScale.Crop,
         )
         Text(

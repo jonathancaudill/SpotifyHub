@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import sv.lib.squircleshape.SquircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -193,7 +193,7 @@ private fun SearchBar(
         modifier = Modifier
             .fillMaxWidth()
             .height(44.dp)
-            .clip(RoundedCornerShape(22.dp))
+            .clip(SquircleShape(22.dp))
             .background(SearchBarBackground)
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -251,7 +251,7 @@ private fun SearchResultRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(SquircleShape(8.dp))
             .background(if (isNowPlaying) SpotifyGreen.copy(alpha = 0.08f) else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 6.dp),
@@ -270,7 +270,7 @@ private fun SearchResultRow(
                         if (item.type == BrowseItemType.Artist) {
                             androidx.compose.foundation.shape.CircleShape
                         } else {
-                            RoundedCornerShape(6.dp)
+                            SquircleShape(6.dp)
                         },
                     ),
                 contentScale = ContentScale.Crop,

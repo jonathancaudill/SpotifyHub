@@ -14,6 +14,7 @@ browser = "1.9.0"
 appcompat = "1.7.1"
 security-crypto = "1.1.0"
 cupertino = "0.1.0-alpha04"
+squircle-shape = "5.2.0"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
@@ -48,6 +49,7 @@ coil-okhttp = { module = "io.coil-kt:coil-network-okhttp", version.ref = "coil" 
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 cupertino-icons-extended = { module = "io.github.alexzhirkevich:cupertino-icons-extended", version.ref = "cupertino" }
 cupertino = { module = "io.github.alexzhirkevich:cupertino", version.ref = "cupertino" }
+squircle-shape-android = { module = "com.stoyanvuchev:squircle-shape-android", version.ref = "squircle-shape" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

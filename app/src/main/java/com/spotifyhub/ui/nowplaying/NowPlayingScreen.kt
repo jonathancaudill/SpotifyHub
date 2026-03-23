@@ -29,7 +29,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import sv.lib.squircleshape.SquircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -87,8 +87,8 @@ import kotlinx.coroutines.delay
 
 /* ── Shape & colour tokens ─────────────────────────────────────────── */
 
-private val SidebarShape = RoundedCornerShape(24.dp)
-private val ArtworkShape = RoundedCornerShape(18.dp)
+private val SidebarShape = SquircleShape(24.dp)
+private val ArtworkShape = SquircleShape(18.dp)
 
 private val SidebarSurface = Color(0x2415181D)
 private val SidebarBorder = Color.White.copy(alpha = 0.08f)
@@ -168,14 +168,14 @@ fun NowPlayingContent(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(8.dp)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(SquircleShape(8.dp))
                     .background(Color.Black.copy(alpha = 0.5f))
                     .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(SquircleShape(6.dp))
                         .clickable(enabled = blurPassCount > 0) {
                             blurPassCount = (blurPassCount - 1).coerceAtLeast(0)
                         }
@@ -197,7 +197,7 @@ fun NowPlayingContent(
                 )
                 Box(
                     modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(SquircleShape(6.dp))
                         .clickable(enabled = blurPassCount < maxPasses) {
                             blurPassCount = (blurPassCount + 1).coerceAtMost(maxPasses)
                         }
@@ -291,14 +291,14 @@ fun NowPlayingScreen(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(8.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(SquircleShape(8.dp))
                 .background(Color.Black.copy(alpha = 0.5f))
                 .padding(horizontal = 4.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(SquircleShape(6.dp))
                     .clickable(enabled = blurPassCount > 0) {
                         blurPassCount = (blurPassCount - 1).coerceAtLeast(0)
                     }
@@ -320,7 +320,7 @@ fun NowPlayingScreen(
             )
             Box(
                 modifier = Modifier
-                    .clip(RoundedCornerShape(6.dp))
+                    .clip(SquircleShape(6.dp))
                     .clickable(enabled = blurPassCount < maxPasses) {
                         blurPassCount = (blurPassCount + 1).coerceAtMost(maxPasses)
                     }
@@ -845,7 +845,7 @@ private fun ProgressSection(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(trackHeight)
-                    .clip(RoundedCornerShape(99.dp))
+                    .clip(SquircleShape(99.dp))
                     .background(Color.White.copy(alpha = 0.16f)),
             )
 
@@ -854,7 +854,7 @@ private fun ProgressSection(
                 modifier = Modifier
                     .fillMaxWidth(fraction = displayFraction)
                     .height(trackHeight)
-                    .clip(RoundedCornerShape(99.dp))
+                    .clip(SquircleShape(99.dp))
                     .background(Color.White.copy(alpha = 0.90f)),
             )
 

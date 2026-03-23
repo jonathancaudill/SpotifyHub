@@ -19,7 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import sv.lib.squircleshape.SquircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.CircularProgressIndicator
@@ -228,7 +228,7 @@ private fun CategoryChip(
 ) {
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
+            .clip(SquircleShape(20.dp))
             .background(if (isSelected) ChipSelectedBackground else ChipBackground)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -254,7 +254,7 @@ private fun LibraryItemRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(SquircleShape(8.dp))
             .background(if (isNowPlaying) SpotifyGreen.copy(alpha = 0.08f) else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 8.dp),
@@ -279,7 +279,7 @@ private fun LibraryItemRow(
             contentDescription = item.name,
             modifier = Modifier
                 .size(52.dp)
-                .clip(RoundedCornerShape(6.dp)),
+                .clip(SquircleShape(6.dp)),
             contentScale = ContentScale.Crop,
         )
         Spacer(modifier = Modifier.width(12.dp))

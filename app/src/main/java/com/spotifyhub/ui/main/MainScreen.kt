@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,12 +37,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import sv.lib.squircleshape.SquircleShape
 import com.spotifyhub.ui.detail.DetailScreen
 import com.spotifyhub.ui.detail.DetailViewModel
 import com.spotifyhub.ui.home.HomeScreen
@@ -62,7 +63,7 @@ import kotlinx.coroutines.delay
 
 /* ── Tokens ──────────────────────────────────────────────────────── */
 
-private val SidebarShape = RoundedCornerShape(24.dp)
+private val SidebarShape = SquircleShape(24.dp)
 private val SidebarSurface = Color(0x2415181D)
 private val SidebarBorder = Color.White.copy(alpha = 0.08f)
 private val SurfaceShadow = Color.Black.copy(alpha = 0.20f)
@@ -71,7 +72,7 @@ private val BrowseBackdropStart = Color(0xFF132433)
 private val BrowseBackdropMid = Color(0xFF161A22)
 private val BrowseBackdropEnd = Color(0xFF101318)
 private val BrowseContentSurface = Color(0xFF171A1F)
-private val DetailSheetShape = RoundedCornerShape(0.dp)
+private val DetailSheetShape = RectangleShape
 
 /* ── Public entry-point ──────────────────────────────────────────── */
 
@@ -161,7 +162,7 @@ fun MainScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .clip(RoundedCornerShape(28.dp)),
+                        .clip(SquircleShape(28.dp)),
                 ) {
                     Box(
                         modifier = Modifier
@@ -429,7 +430,7 @@ private fun TabIcon(
 
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(SquircleShape(12.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 4.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
