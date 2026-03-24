@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -44,7 +45,9 @@ import com.spotifyhub.browse.model.BrowseItem
 import com.spotifyhub.browse.model.BrowseItemType
 import com.spotifyhub.browse.model.HomeSection
 import com.spotifyhub.browse.model.SectionStyle
+import com.spotifyhub.ui.common.LandscapeUiProfile
 import com.spotifyhub.ui.common.bounceOverscroll
+import com.spotifyhub.ui.common.rememberLandscapeUiProfile
 
 private val BrowseBackground = Color(0xFF171A1F)
 private val SpotifyGreen = Color(0xFF1ED760)
@@ -57,11 +60,12 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(BrowseBackground),
     ) {
+        val profile = rememberLandscapeUiProfile(maxWidth = maxWidth, maxHeight = maxHeight)
         when {
             uiState.isLoading && uiState.sections.isEmpty() -> {
                 CircularProgressIndicator(
@@ -85,8 +89,8 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .bounceOverscroll(orientation = Orientation.Vertical),
-                    contentPadding = PaddingValues(vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(vertical = if (profile.isCompactHeight) 10.dp else 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (profile.isCompactHeight) 12.dp else 14.dp),
                 ) {
                     /* Greeting */
                     if (uiState.greeting.isNotBlank()) {
@@ -96,7 +100,7 @@ fun HomeScreen(
                                 color = Color.White,
                                 style = MaterialTheme.typography.headlineMedium.copy(
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 26.sp,
+                                    fontSize = profile.homeGreetingSize,
                                 ),
                                 modifier = Modifier.padding(horizontal = 16.dp),
                             )
@@ -107,6 +111,7 @@ fun HomeScreen(
                     if (uiState.quickAccess.isNotEmpty()) {
                         item {
                             QuickAccessGrid(
+                                profile = profile,
                                 items = uiState.quickAccess,
                                 onItemClick = onItemClick,
                             )
@@ -116,6 +121,7 @@ fun HomeScreen(
                     /* Sections */
                     items(uiState.sections, key = { it.title }) { section ->
                         HomeSectionRow(
+                            profile = profile,
                             section = section,
                             onItemClick = onItemClick,
                         )
@@ -130,6 +136,7 @@ fun HomeScreen(
 
 @Composable
 private fun QuickAccessGrid(
+    profile: LandscapeUiProfile,
     items: List<BrowseItem>,
     onItemClick: (BrowseItem) -> Unit,
 ) {
@@ -144,6 +151,7 @@ private fun QuickAccessGrid(
             ) {
                 rowItems.forEach { item ->
                     QuickAccessCard(
+                        profile = profile,
                         item = item,
                         onClick = { onItemClick(item) },
                         modifier = Modifier.weight(1f),
@@ -160,6 +168,7 @@ private fun QuickAccessGrid(
 
 @Composable
 private fun QuickAccessCard(
+    profile: LandscapeUiProfile,
     item: BrowseItem,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -167,7 +176,7 @@ private fun QuickAccessCard(
     val context = LocalContext.current
     Row(
         modifier = modifier
-            .height(52.dp)
+            .height(profile.quickAccessCardHeight)
             .clip(SquircleShape(6.dp))
             .background(Color.White.copy(alpha = 0.08f))
             .clickable(onClick = onClick),
@@ -191,7 +200,7 @@ private fun QuickAccessCard(
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodySmall.copy(
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 11.sp,
+                fontSize = profile.quickAccessTitleSize,
             ),
             modifier = Modifier.padding(horizontal = 8.dp),
         )
@@ -202,6 +211,7 @@ private fun QuickAccessCard(
 
 @Composable
 private fun HomeSectionRow(
+    profile: LandscapeUiProfile,
     section: HomeSection,
     onItemClick: (BrowseItem) -> Unit,
 ) {
@@ -211,7 +221,7 @@ private fun HomeSectionRow(
             color = Color.White,
             style = MaterialTheme.typography.titleMedium.copy(
                 fontWeight = FontWeight.Bold,
-                fontSize = 20.sp,
+                fontSize = profile.browseSectionTitleSize,
             ),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
@@ -226,11 +236,13 @@ private fun HomeSectionRow(
                 when (section.style) {
                     SectionStyle.HorizontalCircle -> ArtistCircleCard(
                         item = item,
+                        profile = profile,
                         onClick = { onItemClick(item) },
                     )
 
                     SectionStyle.HorizontalCards -> BrowseCard(
                         item = item,
+                        profile = profile,
                         onClick = { onItemClick(item) },
                     )
                 }
@@ -244,12 +256,13 @@ private fun HomeSectionRow(
 @Composable
 private fun BrowseCard(
     item: BrowseItem,
+    profile: LandscapeUiProfile,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
     Column(
         modifier = Modifier
-            .width(120.dp)
+            .width(profile.browseCardWidth)
             .clickable(onClick = onClick),
     ) {
         AsyncImage(
@@ -271,7 +284,7 @@ private fun BrowseCard(
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodySmall.copy(
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp,
+                fontSize = profile.browseCardTitleSize,
             ),
         )
         if (item.subtitle.isNotBlank()) {
@@ -281,7 +294,7 @@ private fun BrowseCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall.copy(
-                    fontSize = 10.sp,
+                    fontSize = profile.browseCardSubtitleSize,
                 ),
             )
         }
@@ -293,12 +306,13 @@ private fun BrowseCard(
 @Composable
 private fun ArtistCircleCard(
     item: BrowseItem,
+    profile: LandscapeUiProfile,
     onClick: () -> Unit,
 ) {
     val context = LocalContext.current
     Column(
         modifier = Modifier
-            .width(100.dp)
+            .width(profile.artistCardWidth)
             .clickable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -309,7 +323,7 @@ private fun ArtistCircleCard(
                 .build(),
             contentDescription = item.title,
             modifier = Modifier
-                .size(100.dp)
+                .size(profile.artistCardWidth)
                 .clip(CircleShape),
             contentScale = ContentScale.Crop,
         )
@@ -321,7 +335,7 @@ private fun ArtistCircleCard(
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.bodySmall.copy(
                 fontWeight = FontWeight.Medium,
-                fontSize = 11.sp,
+                fontSize = profile.artistCardTitleSize,
             ),
         )
     }

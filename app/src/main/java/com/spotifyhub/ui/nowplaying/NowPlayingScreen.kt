@@ -1,14 +1,13 @@
 package com.spotifyhub.ui.nowplaying
 
 import android.text.format.DateFormat
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -16,6 +15,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,13 +46,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -70,13 +66,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.spotifyhub.playback.model.PlaybackDevice
 import com.spotifyhub.playback.model.PlaybackContentType
 import com.spotifyhub.playback.model.PlaybackItem
 import com.spotifyhub.playback.model.PlaybackSnapshot
 import com.spotifyhub.playback.model.RepeatMode
 import com.spotifyhub.theme.SpotifyHubTheme
+import com.spotifyhub.ui.common.LandscapeUiProfile
+import com.spotifyhub.ui.common.rememberLandscapeUiProfile
 import com.spotifyhub.ui.icons.AppIcons
 import com.spotifyhub.ui.nowplaying.backdrop.AlbumBackdropHost
 import kotlin.math.max
@@ -127,11 +124,17 @@ fun NowPlayingContent(
     viewModel: PlayerViewModel,
     isOffline: Boolean,
     renderBackdrop: Boolean = true,
+    blurPassCount: Int? = null,
+    maxBlurPasses: Int = 8,
+    onBlurPassCountChange: ((Int) -> Unit)? = null,
 ) {
     val uiState = viewModel.uiState.collectAsStateWithLifecycle().value
     val playback = uiState.playback
-    val maxPasses = 8
-    var blurPassCount by rememberSaveable { mutableStateOf(maxPasses) }
+    var internalBlurPassCount by rememberSaveable { mutableStateOf(maxBlurPasses) }
+    val resolvedBlurPassCount = blurPassCount ?: internalBlurPassCount
+    val resolvedOnBlurPassCountChange = onBlurPassCountChange ?: { count: Int ->
+        internalBlurPassCount = count
+    }
 
     Box(
         modifier = Modifier
@@ -139,99 +142,43 @@ fun NowPlayingContent(
             .background(Color.Transparent),
     ) {
         if (renderBackdrop) {
-            /* Dynamic album-art backdrop */
             AlbumBackdropHost(
                 artworkUrl = playback?.item?.artworkUrl,
                 artworkKey = playback?.item?.id,
-                blurPassCount = blurPassCount,
+                blurPassCount = resolvedBlurPassCount,
                 modifier = Modifier.fillMaxSize(),
             )
-
-            /* Subtle gradient overlay */
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.linearGradient(
-                            colors = listOf(
-                                Color(0x2808090C),
-                                Color(0x10090A0C),
-                                Color(0x32060709),
-                            ),
-                        ),
-                    ),
-            )
-
-            /* Debug: blur pass stepper */
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-                    .clip(SquircleShape(8.dp))
-                    .background(Color.Black.copy(alpha = 0.5f))
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(SquircleShape(6.dp))
-                        .clickable(enabled = blurPassCount > 0) {
-                            blurPassCount = (blurPassCount - 1).coerceAtLeast(0)
-                        }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                ) {
-                    Text(
-                        text = "\u2212",
-                        color = if (blurPassCount > 0) Color.White else Color.White.copy(alpha = 0.3f),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-                Text(
-                    text = "BLUR $blurPassCount/$maxPasses",
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(SquircleShape(6.dp))
-                        .clickable(enabled = blurPassCount < maxPasses) {
-                            blurPassCount = (blurPassCount + 1).coerceAtMost(maxPasses)
-                        }
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                ) {
-                    Text(
-                        text = "+",
-                        color = if (blurPassCount < maxPasses) Color.White else Color.White.copy(alpha = 0.3f),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
         }
 
-        /* Content — no sidebar, just the main area */
-        MainContent(
-            playback = playback,
-            isCurrentItemSaved = uiState.isCurrentItemSaved == true,
-            transportEnabled = playback?.item != null,
-            saveEnabled = playback?.item != null,
-            utilityEnabled = playback?.device != null,
-            onSkipPrevious = viewModel::skipPrevious,
-            onSeekBackward = { viewModel.seekBy(-15_000L) },
-            onTogglePlayback = viewModel::togglePlayback,
-            onSkipNext = viewModel::skipNext,
-            onSeekForward = { viewModel.seekBy(30_000L) },
-            onToggleSave = viewModel::toggleSaveCurrentItem,
-            onToggleShuffle = viewModel::toggleShuffle,
-            onCycleRepeat = viewModel::cycleRepeatMode,
-            onSeek = viewModel::seekTo,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 6.dp, vertical = 4.dp),
-        )
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val profile = rememberLandscapeUiProfile(maxWidth = maxWidth, maxHeight = maxHeight)
+            MainContent(
+                profile = profile,
+                playback = playback,
+                isCurrentItemSaved = uiState.isCurrentItemSaved == true,
+                transportEnabled = playback?.item != null,
+                saveEnabled = playback?.item != null,
+                utilityEnabled = playback?.device != null,
+                onSkipPrevious = viewModel::skipPrevious,
+                onSeekBackward = { viewModel.seekBy(-15_000L) },
+                onTogglePlayback = viewModel::togglePlayback,
+                onSkipNext = viewModel::skipNext,
+                onSeekForward = { viewModel.seekBy(30_000L) },
+                onToggleSave = viewModel::toggleSaveCurrentItem,
+                onToggleShuffle = viewModel::toggleShuffle,
+                onCycleRepeat = viewModel::cycleRepeatMode,
+                onSeek = viewModel::seekTo,
+                blurPassCount = resolvedBlurPassCount,
+                maxBlurPasses = maxBlurPasses,
+                onBlurPassCountChange = resolvedOnBlurPassCountChange,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        horizontal = profile.mainInnerHorizontalPadding,
+                        vertical = profile.mainInnerVerticalPadding,
+                    ),
+            )
+        }
     }
 }
 
@@ -253,15 +200,14 @@ fun NowPlayingScreen(
     onSeek: (Long) -> Unit,
 ) {
     val playback = uiState.playback
-    val maxPasses = 8
-    var blurPassCount by rememberSaveable { mutableStateOf(maxPasses) }
+    val maxBlurPasses = 8
+    var blurPassCount by rememberSaveable { mutableStateOf(maxBlurPasses) }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF08090B)),
     ) {
-        /* Dynamic album-art backdrop (unchanged) */
         AlbumBackdropHost(
             artworkUrl = playback?.item?.artworkUrl,
             artworkKey = playback?.item?.id,
@@ -269,101 +215,48 @@ fun NowPlayingScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        /* Subtle gradient overlay */
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color(0x2808090C),
-                            Color(0x10090A0C),
-                            Color(0x32060709),
-                        ),
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val profile = rememberLandscapeUiProfile(maxWidth = maxWidth, maxHeight = maxHeight)
+
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        horizontal = profile.outerHorizontalPadding,
+                        vertical = profile.outerVerticalPadding,
                     ),
-                ),
-        )
-
-        /* Debug: blur pass stepper */
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(8.dp)
-                .clip(SquircleShape(8.dp))
-                .background(Color.Black.copy(alpha = 0.5f))
-                .padding(horizontal = 4.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .clip(SquircleShape(6.dp))
-                    .clickable(enabled = blurPassCount > 0) {
-                        blurPassCount = (blurPassCount - 1).coerceAtLeast(0)
-                    }
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(profile.contentGap),
             ) {
-                Text(
-                    text = "\u2212",
-                    color = if (blurPassCount > 0) Color.White else Color.White.copy(alpha = 0.3f),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
+                SidebarRail(
+                    isOffline = isOffline,
+                    profile = profile,
+                    modifier = Modifier.fillMaxHeight(),
+                )
+
+                MainContent(
+                    profile = profile,
+                    playback = playback,
+                    isCurrentItemSaved = uiState.isCurrentItemSaved == true,
+                    transportEnabled = playback?.item != null,
+                    saveEnabled = playback?.item != null,
+                    utilityEnabled = playback?.device != null,
+                    onSkipPrevious = onSkipPrevious,
+                    onSeekBackward = onSeekBackward,
+                    onTogglePlayback = onTogglePlayback,
+                    onSkipNext = onSkipNext,
+                    onSeekForward = onSeekForward,
+                    onToggleSave = onToggleSave,
+                    onToggleShuffle = onToggleShuffle,
+                    onCycleRepeat = onCycleRepeat,
+                    onSeek = onSeek,
+                    blurPassCount = blurPassCount,
+                    maxBlurPasses = maxBlurPasses,
+                    onBlurPassCountChange = { blurPassCount = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
                 )
             }
-            Text(
-                text = "BLUR $blurPassCount/$maxPasses",
-                color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
-            Box(
-                modifier = Modifier
-                    .clip(SquircleShape(6.dp))
-                    .clickable(enabled = blurPassCount < maxPasses) {
-                        blurPassCount = (blurPassCount + 1).coerceAtMost(maxPasses)
-                    }
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            ) {
-                Text(
-                    text = "+",
-                    color = if (blurPassCount < maxPasses) Color.White else Color.White.copy(alpha = 0.3f),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
-        }
-
-        /* Content */
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            SidebarRail(
-                isOffline = isOffline,
-                modifier = Modifier.fillMaxHeight(),
-            )
-
-            MainContent(
-                playback = playback,
-                isCurrentItemSaved = uiState.isCurrentItemSaved == true,
-                transportEnabled = playback?.item != null,
-                saveEnabled = playback?.item != null,
-                utilityEnabled = playback?.device != null,
-                onSkipPrevious = onSkipPrevious,
-                onSeekBackward = onSeekBackward,
-                onTogglePlayback = onTogglePlayback,
-                onSkipNext = onSkipNext,
-                onSeekForward = onSeekForward,
-                onToggleSave = onToggleSave,
-                onToggleShuffle = onToggleShuffle,
-                onCycleRepeat = onCycleRepeat,
-                onSeek = onSeek,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
-            )
         }
     }
 }
@@ -373,11 +266,12 @@ fun NowPlayingScreen(
 @Composable
 private fun SidebarRail(
     isOffline: Boolean,
+    profile: LandscapeUiProfile,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
-            .width(62.dp)
+            .width(profile.sidebarWidth)
             .clip(SidebarShape)
             .background(SidebarSurface)
             .border(1.dp, SidebarBorder, SidebarShape),
@@ -385,7 +279,10 @@ private fun SidebarRail(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(vertical = 16.dp, horizontal = 10.dp),
+                .padding(
+                    vertical = profile.sidebarVerticalPadding,
+                    horizontal = profile.sidebarHorizontalPadding,
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -394,6 +291,7 @@ private fun SidebarRail(
                 text = rememberClockLabel(),
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.SemiBold,
+                    fontSize = profile.clockFontSize,
                     letterSpacing = 0.4.sp,
                 ),
                 color = Color.White,
@@ -409,6 +307,7 @@ private fun SidebarRail(
 
 @Composable
 private fun MainContent(
+    profile: LandscapeUiProfile,
     playback: PlaybackSnapshot?,
     isCurrentItemSaved: Boolean,
     transportEnabled: Boolean,
@@ -423,75 +322,111 @@ private fun MainContent(
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
     onSeek: (Long) -> Unit,
+    blurPassCount: Int,
+    maxBlurPasses: Int,
+    onBlurPassCountChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-    ) {
-        /* Hero zone: left column (metadata + transport) | right column (artwork) */
+    if (profile.isCompactHeight) {
+        CompactMainContent(
+            profile = profile,
+            playback = playback,
+            isCurrentItemSaved = isCurrentItemSaved,
+            transportEnabled = transportEnabled,
+            saveEnabled = saveEnabled,
+            utilityEnabled = utilityEnabled,
+            onSkipPrevious = onSkipPrevious,
+            onSeekBackward = onSeekBackward,
+            onTogglePlayback = onTogglePlayback,
+            onSkipNext = onSkipNext,
+            onSeekForward = onSeekForward,
+            onToggleSave = onToggleSave,
+            onToggleShuffle = onToggleShuffle,
+            onCycleRepeat = onCycleRepeat,
+            onSeek = onSeek,
+            blurPassCount = blurPassCount,
+            maxBlurPasses = maxBlurPasses,
+            onBlurPassCountChange = onBlurPassCountChange,
+            modifier = modifier.padding(
+                horizontal = profile.mainInnerHorizontalPadding,
+                vertical = profile.mainInnerVerticalPadding,
+            ),
+        )
+    } else {
+        StandardMainContent(
+            profile = profile,
+            playback = playback,
+            isCurrentItemSaved = isCurrentItemSaved,
+            transportEnabled = transportEnabled,
+            saveEnabled = saveEnabled,
+            utilityEnabled = utilityEnabled,
+            onSkipPrevious = onSkipPrevious,
+            onSeekBackward = onSeekBackward,
+            onTogglePlayback = onTogglePlayback,
+            onSkipNext = onSkipNext,
+            onSeekForward = onSeekForward,
+            onToggleSave = onToggleSave,
+            onToggleShuffle = onToggleShuffle,
+            onCycleRepeat = onCycleRepeat,
+            onSeek = onSeek,
+            blurPassCount = blurPassCount,
+            maxBlurPasses = maxBlurPasses,
+            onBlurPassCountChange = onBlurPassCountChange,
+            modifier = modifier.padding(
+                horizontal = profile.mainInnerHorizontalPadding,
+                vertical = profile.mainInnerVerticalPadding,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun StandardMainContent(
+    profile: LandscapeUiProfile,
+    playback: PlaybackSnapshot?,
+    isCurrentItemSaved: Boolean,
+    transportEnabled: Boolean,
+    saveEnabled: Boolean,
+    utilityEnabled: Boolean,
+    onSkipPrevious: () -> Unit,
+    onSeekBackward: () -> Unit,
+    onTogglePlayback: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSeekForward: () -> Unit,
+    onToggleSave: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onSeek: (Long) -> Unit,
+    blurPassCount: Int,
+    maxBlurPasses: Int,
+    onBlurPassCountChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val item = playback?.item
+
+    Box(modifier = modifier) {
+        Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(profile.nowPlayingHeroGap),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            /* Left: metadata above, transport pinned at bottom */
             Column(
                 modifier = Modifier
-                    .weight(0.58f)
+                    .weight(profile.nowPlayingMetaWeight)
                     .fillMaxHeight(),
-                verticalArrangement = Arrangement.Center,
             ) {
-                val item = playback?.item
+                MetadataBlock(
+                    item = item,
+                    profile = profile,
+                )
 
-                /* Metadata — takes up available space, vertically centered */
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(
-                        text = item?.title ?: "Not Playing",
-                        color = Color.White,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.headlineLarge.copy(
-                            fontSize = 34.sp,
-                            lineHeight = 38.sp,
-                            fontWeight = FontWeight.Bold,
-                        ),
-                    )
+                Spacer(modifier = Modifier.weight(1f))
 
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        text = item?.artist ?: "Connect to start listening",
-                        color = Color.White.copy(alpha = 0.85f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Medium,
-                        ),
-                    )
-
-                    item?.album?.takeIf { it.isNotBlank() }?.let { album ->
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = album,
-                            color = Color.White.copy(alpha = 0.50f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontSize = 16.sp,
-                                letterSpacing = 0.3.sp,
-                            ),
-                        )
-                    }
-                }
-
-                /* Transport controls — pinned at bottom of left column */
                 TransportRow(
+                    profile = profile,
                     item = item,
                     isPlaying = playback?.isPlaying == true,
                     enabled = transportEnabled,
@@ -501,35 +436,230 @@ private fun MainContent(
                     onSkipNext = onSkipNext,
                     onSeekForward = onSeekForward,
                 )
+
+                Spacer(modifier = Modifier.height(profile.nowPlayingSectionGap))
+
+                UtilityRow(
+                    profile = profile,
+                    playback = playback,
+                    isCurrentItemSaved = isCurrentItemSaved,
+                    saveEnabled = saveEnabled,
+                    utilityEnabled = utilityEnabled,
+                    onToggleSave = onToggleSave,
+                    onToggleShuffle = onToggleShuffle,
+                    onCycleRepeat = onCycleRepeat,
+                )
             }
 
-            /* Right: album artwork */
             ArtworkHero(
-                artworkUrl = playback?.item?.artworkUrl,
-                title = playback?.item?.title,
+                artworkUrl = item?.artworkUrl,
+                title = item?.title,
                 modifier = Modifier
-                    .weight(0.42f)
+                    .weight(profile.nowPlayingArtworkWeight)
                     .aspectRatio(1f),
             )
         }
 
-        Spacer(modifier = Modifier.height(26.dp))
+        Spacer(modifier = Modifier.height(profile.nowPlayingProgressToUtilityGap))
 
-        /* Progress bar — full width */
-        ProgressSection(playback = playback, onSeek = onSeek)
+        ProgressSection(profile = profile, playback = playback, onSeek = onSeek)
+        }
+
+        // BlurPassStepper disabled: blur is fixed in AlbumBackdropHost.
+    }
+}
+
+@Composable
+private fun CompactMainContent(
+    profile: LandscapeUiProfile,
+    playback: PlaybackSnapshot?,
+    isCurrentItemSaved: Boolean,
+    transportEnabled: Boolean,
+    saveEnabled: Boolean,
+    utilityEnabled: Boolean,
+    onSkipPrevious: () -> Unit,
+    onSeekBackward: () -> Unit,
+    onTogglePlayback: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSeekForward: () -> Unit,
+    onToggleSave: () -> Unit,
+    onToggleShuffle: () -> Unit,
+    onCycleRepeat: () -> Unit,
+    onSeek: (Long) -> Unit,
+    blurPassCount: Int,
+    maxBlurPasses: Int,
+    onBlurPassCountChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val item = playback?.item
+
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalArrangement = Arrangement.spacedBy(profile.nowPlayingHeroGap),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(
+                modifier = Modifier
+                    .weight(profile.nowPlayingMetaWeight)
+                    .fillMaxHeight(),
+            ) {
+                MetadataBlock(
+                    item = item,
+                    profile = profile,
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+
+                Spacer(modifier = Modifier.height(profile.nowPlayingSectionGap))
+
+                TransportRow(
+                    profile = profile,
+                    item = item,
+                    isPlaying = playback?.isPlaying == true,
+                    enabled = transportEnabled,
+                    onSkipPrevious = onSkipPrevious,
+                    onSeekBackward = onSeekBackward,
+                    onTogglePlayback = onTogglePlayback,
+                    onSkipNext = onSkipNext,
+                    onSeekForward = onSeekForward,
+                )
+
+                Spacer(modifier = Modifier.height(profile.nowPlayingSectionGap))
+
+                UtilityRow(
+                    profile = profile,
+                    playback = playback,
+                    isCurrentItemSaved = isCurrentItemSaved,
+                    saveEnabled = saveEnabled,
+                    utilityEnabled = utilityEnabled,
+                    onToggleSave = onToggleSave,
+                    onToggleShuffle = onToggleShuffle,
+                    onCycleRepeat = onCycleRepeat,
+                )
+            }
+
+            CompactArtworkHero(
+                artworkUrl = item?.artworkUrl,
+                title = item?.title,
+                modifier = Modifier
+                    .weight(profile.nowPlayingArtworkWeight)
+                    .fillMaxHeight(),
+                )
+        }
+
+        Spacer(modifier = Modifier.height(profile.nowPlayingProgressToUtilityGap))
+
+        ProgressSection(
+            profile = profile,
+            playback = playback,
+            onSeek = onSeek,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        }
+
+        // BlurPassStepper disabled: blur is fixed in AlbumBackdropHost.
+    }
+}
+
+@Composable
+private fun BlurPassStepper(
+    blurPassCount: Int,
+    maxPasses: Int,
+    onBlurPassCountChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.5f))
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "-",
+            color = Color.White,
+            modifier = Modifier
+                .clickable(enabled = blurPassCount > 0) {
+                    onBlurPassCountChange((blurPassCount - 1).coerceAtLeast(0))
+                }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+        Text(
+            text = "blur $blurPassCount/$maxPasses",
+            color = Color.White,
+            fontSize = 12.sp,
+        )
+        Text(
+            text = "+",
+            color = Color.White,
+            modifier = Modifier
+                .clickable(enabled = blurPassCount < maxPasses) {
+                    onBlurPassCountChange((blurPassCount + 1).coerceAtMost(maxPasses))
+                }
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun MetadataBlock(
+    item: PlaybackItem?,
+    profile: LandscapeUiProfile,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.padding(top = if (profile.isCompactHeight) 14.dp else 10.dp),
+    ) {
+        Text(
+            text = item?.title ?: "Not Playing",
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            style = MaterialTheme.typography.headlineLarge.copy(
+                fontSize = profile.nowPlayingTitleSize,
+                lineHeight = profile.nowPlayingTitleLineHeight,
+                fontWeight = FontWeight.Bold,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .basicMarquee(),
+        )
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        /* Utility row: shuffle, repeat, save */
-        UtilityRow(
-            playback = playback,
-            isCurrentItemSaved = isCurrentItemSaved,
-            saveEnabled = saveEnabled,
-            utilityEnabled = utilityEnabled,
-            onToggleSave = onToggleSave,
-            onToggleShuffle = onToggleShuffle,
-            onCycleRepeat = onCycleRepeat,
+        Text(
+            text = item?.artist ?: "Connect to start listening",
+            color = Color.White.copy(alpha = 0.85f),
+            maxLines = 1,
+            overflow = TextOverflow.Clip,
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontSize = profile.nowPlayingArtistSize,
+                fontWeight = FontWeight.Medium,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .basicMarquee(),
         )
+
+        item?.album?.takeIf { it.isNotBlank() }?.let { album ->
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = album,
+                color = Color.White.copy(alpha = 0.50f),
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontSize = profile.nowPlayingAlbumSize,
+                    letterSpacing = 0.3.sp,
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .basicMarquee(),
+            )
+        }
     }
 }
 
@@ -541,8 +671,6 @@ private fun ArtworkHero(
     title: String?,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-
     Box(
         modifier = modifier
             .shadow(24.dp, ArtworkShape, clip = false, ambientColor = SurfaceShadow, spotColor = SurfaceShadow)
@@ -558,10 +686,7 @@ private fun ArtworkHero(
                 label = "artwork-crossfade",
             ) { model ->
                 AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(model)
-                        .crossfade(true)
-                        .build(),
+                    model = model,
                     contentDescription = title,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
@@ -570,6 +695,24 @@ private fun ArtworkHero(
         } else {
             ArtworkPlaceholder()
         }
+    }
+}
+
+@Composable
+private fun CompactArtworkHero(
+    artworkUrl: String?,
+    title: String?,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        ArtworkHero(
+            artworkUrl = artworkUrl,
+            title = title,
+            modifier = Modifier.size(if (maxWidth < maxHeight) maxWidth else maxHeight),
+        )
     }
 }
 
@@ -610,6 +753,7 @@ private fun ArtworkPlaceholder() {
 
 @Composable
 private fun TransportRow(
+    profile: LandscapeUiProfile,
     item: PlaybackItem?,
     isPlaying: Boolean,
     enabled: Boolean,
@@ -637,12 +781,12 @@ private fun TransportRow(
             },
             contentDescription = if (useRelativeSeekControls) "Back 15 seconds" else "Previous track",
             iconSize = 52.dp,
-            modifier = Modifier.size(72.dp),
+            modifier = Modifier.size(profile.transportSideButtonSize),
             badgeText = if (useRelativeSeekControls) "15" else null,
             badgeInsideIcon = useRelativeSeekControls,
         )
 
-        Spacer(modifier = Modifier.width(24.dp))
+        Spacer(modifier = Modifier.width(profile.transportGap))
 
         TouchFeedbackButton(
             onClick = onTogglePlayback,
@@ -650,10 +794,10 @@ private fun TransportRow(
             icon = if (isPlaying) AppIcons.pause else AppIcons.play,
             contentDescription = if (isPlaying) "Pause" else "Play",
             iconSize = 64.dp,
-            modifier = Modifier.size(88.dp),
+            modifier = Modifier.size(profile.transportCenterButtonSize),
         )
 
-        Spacer(modifier = Modifier.width(24.dp))
+        Spacer(modifier = Modifier.width(profile.transportGap))
 
         TouchFeedbackButton(
             onClick = if (useRelativeSeekControls) onSeekForward else onSkipNext,
@@ -665,7 +809,7 @@ private fun TransportRow(
             },
             contentDescription = if (useRelativeSeekControls) "Forward 30 seconds" else "Next track",
             iconSize = 52.dp,
-            modifier = Modifier.size(72.dp),
+            modifier = Modifier.size(profile.transportSideButtonSize),
             badgeText = if (useRelativeSeekControls) "30" else null,
             badgeInsideIcon = useRelativeSeekControls,
         )
@@ -676,6 +820,7 @@ private fun TransportRow(
 
 @Composable
 private fun UtilityRow(
+    profile: LandscapeUiProfile,
     playback: PlaybackSnapshot?,
     isCurrentItemSaved: Boolean,
     saveEnabled: Boolean,
@@ -683,12 +828,13 @@ private fun UtilityRow(
     onToggleSave: () -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
+    centered: Boolean = true,
 ) {
     val repeatMode = playback?.repeatMode ?: RepeatMode.Off
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
+        horizontalArrangement = if (centered) Arrangement.Center else Arrangement.Start,
         verticalAlignment = Alignment.CenterVertically,
     ) {
         TouchFeedbackButton(
@@ -701,7 +847,7 @@ private fun UtilityRow(
             activeColor = if (playback?.isShuffleEnabled == true) Color.White else Color.White.copy(alpha = 0.55f),
         )
 
-        Spacer(modifier = Modifier.width(32.dp))
+        Spacer(modifier = Modifier.width(profile.utilityButtonSpacing))
 
         TouchFeedbackButton(
             onClick = onCycleRepeat,
@@ -718,7 +864,7 @@ private fun UtilityRow(
             badgeText = if (repeatMode == RepeatMode.Track) "1" else null,
         )
 
-        Spacer(modifier = Modifier.width(32.dp))
+        Spacer(modifier = Modifier.width(profile.utilityButtonSpacing))
 
         TouchFeedbackButton(
             onClick = onToggleSave,
@@ -736,8 +882,10 @@ private fun UtilityRow(
 
 @Composable
 private fun ProgressSection(
+    profile: LandscapeUiProfile,
     playback: PlaybackSnapshot?,
     onSeek: (Long) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val interpolatedMs = rememberInterpolatedProgress(playback)
     val durationMs = max(playback?.durationMs ?: 0L, 1L)
@@ -768,12 +916,12 @@ private fun ProgressSection(
         label = "thumb-size",
     )
     val trackHeight by animateDpAsState(
-        targetValue = if (isDragging) 5.dp else 4.dp,
+        targetValue = if (isDragging) profile.progressDraggingTrackHeight else profile.progressIdleTrackHeight,
         animationSpec = tween(durationMillis = 150),
         label = "track-height",
     )
 
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         /* Custom seek bar */
         Box(
             modifier = Modifier
@@ -853,6 +1001,7 @@ private fun ProgressSection(
                 color = Color.White.copy(alpha = 0.70f),
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontWeight = FontWeight.Medium,
+                    fontSize = profile.progressLabelSize,
                 ),
             )
             Text(
@@ -860,6 +1009,7 @@ private fun ProgressSection(
                 color = Color.White.copy(alpha = 0.45f),
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontWeight = FontWeight.Medium,
+                    fontSize = profile.progressLabelSize,
                 ),
             )
         }
@@ -1037,7 +1187,6 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
                     ),
                 ),
                 isCurrentItemSaved = false,
-                isRefreshing = false,
             ),
             isOffline = false,
         ),
@@ -1070,7 +1219,6 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
                     ),
                 ),
                 isCurrentItemSaved = true,
-                isRefreshing = false,
             ),
             isOffline = true,
         ),
@@ -1079,7 +1227,6 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
             uiState = PlayerUiState(
                 playback = null,
                 isCurrentItemSaved = null,
-                isRefreshing = false,
             ),
             isOffline = false,
         ),
@@ -1087,6 +1234,8 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
 }
 
 @Preview(name = "Now Playing - Wide", widthDp = 900, heightDp = 500, showBackground = true, backgroundColor = 0xFF090B10)
+@Preview(name = "Now Playing - Compact Height", widthDp = 960, heightDp = 480, showBackground = true, backgroundColor = 0xFF090B10)
+@Preview(name = "Now Playing - Echo Show 5 Shape", widthDp = 800, heightDp = 400, showBackground = true, backgroundColor = 0xFF090B10)
 @Composable
 private fun NowPlayingWidePreview(
     @PreviewParameter(NowPlayingPreviewStateProvider::class) preview: NowPlayingPreviewState,

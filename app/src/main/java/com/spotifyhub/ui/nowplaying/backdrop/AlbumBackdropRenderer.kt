@@ -8,6 +8,8 @@ import android.os.SystemClock
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
+import kotlin.math.cos
+import kotlin.math.sin
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
@@ -28,18 +30,23 @@ class AlbumBackdropRenderer(
     private val appContext: Context,
 ) : GLSurfaceView.Renderer {
     private companion object {
-        const val OFFSCREEN_SCALE = 0.50f
-        const val SATURATION = 2.0f
+        const val OFFSCREEN_SCALE = 1.0f
+        const val SATURATION = 2.25f
+        const val TWIST_ANGLE = -1.85f
+        const val TWIST_CROP = 1.22f
+        const val SCENE_ZOOM = 1.22f
+        const val TRANSITION_DURATION_MS = 450L
+        const val TAU = (Math.PI * 2.0).toFloat()
 
-        // Stacked Kawase blur with coprime-ish offsets to prevent grid
-        // artifacts from aligning across passes. The 9-tap kernel (diagonal +
-        // cardinal) in the shader eliminates per-pass compound-eye artifacts,
-        // and these non-power-of-2 offsets ensure residual patterns from
-        // different passes destructively interfere.
-        val KAWASE_OFFSETS = floatArrayOf(5f, 11f, 19f, 13f, 37f, 23f, 71f, 43f)
+        val SPRITE_SIZE_FACTORS = floatArrayOf(1.25f, 0.80f, 0.50f, 0.25f)
+        val SPRITE_ROTATION_SPEEDS = floatArrayOf(0.05f, -0.12f, -0.09f, 0.06f)
+
+        // Full-resolution rendering can support a much broader blur ladder
+        // before the field collapses into blocks, so push the offsets back up.
+        val KAWASE_OFFSETS = floatArrayOf(6f, 10f, 16f, 24f, 34f, 46f, 60f, 78f)
     }
 
-    private val quadVertices: FloatBuffer = ByteBuffer
+    private val fullscreenQuad: FloatBuffer = ByteBuffer
         .allocateDirect(4 * 4 * 4)
         .order(ByteOrder.nativeOrder())
         .asFloatBuffer()
@@ -55,28 +62,41 @@ class AlbumBackdropRenderer(
             position(0)
         }
 
-    private var sceneProgram = 0
+    private val spriteQuad: FloatBuffer = ByteBuffer
+        .allocateDirect(4 * 4 * 4)
+        .order(ByteOrder.nativeOrder())
+        .asFloatBuffer()
+
+    private var spriteProgram = 0
+    private var twistProgram = 0
     private var blurProgram = 0
+    private var presentProgram = 0
+
     private var sourceTextureIds = IntArray(2)
-    private var framebufferIds = IntArray(2)
-    private var framebufferTextureIds = IntArray(2)
+    private var framebufferIds = IntArray(3)
+    private var framebufferTextureIds = IntArray(3)
+
     private var viewportWidth = 1
     private var viewportHeight = 1
     private var offscreenWidth = 1
     private var offscreenHeight = 1
     private var surfaceReady = false
 
-    private var scenePositionHandle = 0
-    private var sceneTexCoordHandle = 0
-    private var sceneResolutionHandle = 0
-    private var sceneTimeHandle = 0
-    private var sceneTransitionHandle = 0
-    private var sceneCurrentSeedHandle = 0
-    private var scenePreviousSeedHandle = 0
-    private var sceneCurrentAspectHandle = 0
-    private var scenePreviousAspectHandle = 0
-    private var sceneCurrentTextureHandle = 0
-    private var scenePreviousTextureHandle = 0
+    private var spritePositionHandle = 0
+    private var spriteTexCoordHandle = 0
+    private var spriteTextureHandle = 0
+    private var spriteAspectHandle = 0
+
+    private var twistPositionHandle = 0
+    private var twistTexCoordHandle = 0
+    private var twistPreviousTextureHandle = 0
+    private var twistCurrentTextureHandle = 0
+    private var twistResolutionHandle = 0
+    private var twistTransitionHandle = 0
+    private var twistAngleHandle = 0
+    private var twistRadiusHandle = 0
+    private var twistOffsetHandle = 0
+    private var twistCropHandle = 0
 
     private var blurPositionHandle = 0
     private var blurTexCoordHandle = 0
@@ -86,48 +106,59 @@ class AlbumBackdropRenderer(
     private var blurKawaseOffsetHandle = 0
     private var blurSaturationHandle = 0
 
+    private var presentPositionHandle = 0
+    private var presentTexCoordHandle = 0
+    private var presentTextureHandle = 0
+    private var presentSaturationHandle = 0
+
     private var currentSeed = BackdropSeedFactory.from("idle")
     private var previousSeed = currentSeed
     private var currentAspectRatio = 1f
     private var previousAspectRatio = 1f
     private var transitionStartMs = 0L
-    private var transitionDurationMs = 450L
     private var shouldAnimateTransition = false
     @Volatile
     private var blurPassCount = KAWASE_OFFSETS.size
     private val startTimeMs = SystemClock.elapsedRealtime()
 
-    // The shader uses mediump float (often 16-bit half-float on ES 2.0), so
-    // large time values lose precision and cause visible rotation "snaps".
-    // Wrap at a period where every spin angle (0.045, ±0.12, ±0.09, 0.06)
-    // and orbital factor (×0.75) is an exact multiple of 2π, so the loop is
-    // seamless.  Period = 2π × 400/3 ≈ 837.76 s (~14 min).
     private val timeWrapPeriod = (2.0 * Math.PI * 400.0 / 3.0).toFloat()
     private var pendingState: BackdropTransitionState? = null
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
         GLES20.glClearColor(0f, 0f, 0f, 1f)
 
-        sceneProgram = createProgram(
+        spriteProgram = createProgram(
             vertexSource = appContext.assets.open("shaders/album_backdrop.vert").bufferedReader().use { it.readText() },
-            fragmentSource = appContext.assets.open("shaders/album_backdrop_scene.frag").bufferedReader().use { it.readText() },
+            fragmentSource = appContext.assets.open("shaders/album_backdrop_sprite.frag").bufferedReader().use { it.readText() },
+        )
+        twistProgram = createProgram(
+            vertexSource = appContext.assets.open("shaders/album_backdrop.vert").bufferedReader().use { it.readText() },
+            fragmentSource = appContext.assets.open("shaders/album_backdrop_twist.frag").bufferedReader().use { it.readText() },
         )
         blurProgram = createProgram(
             vertexSource = appContext.assets.open("shaders/album_backdrop.vert").bufferedReader().use { it.readText() },
             fragmentSource = appContext.assets.open("shaders/album_backdrop_blur.frag").bufferedReader().use { it.readText() },
         )
+        presentProgram = createProgram(
+            vertexSource = appContext.assets.open("shaders/album_backdrop.vert").bufferedReader().use { it.readText() },
+            fragmentSource = appContext.assets.open("shaders/album_backdrop_present.frag").bufferedReader().use { it.readText() },
+        )
 
-        scenePositionHandle = GLES20.glGetAttribLocation(sceneProgram, "aPosition")
-        sceneTexCoordHandle = GLES20.glGetAttribLocation(sceneProgram, "aTexCoord")
-        sceneResolutionHandle = GLES20.glGetUniformLocation(sceneProgram, "uResolution")
-        sceneTimeHandle = GLES20.glGetUniformLocation(sceneProgram, "uTime")
-        sceneTransitionHandle = GLES20.glGetUniformLocation(sceneProgram, "uTransition")
-        sceneCurrentSeedHandle = GLES20.glGetUniformLocation(sceneProgram, "uCurrentSeed")
-        scenePreviousSeedHandle = GLES20.glGetUniformLocation(sceneProgram, "uPreviousSeed")
-        sceneCurrentAspectHandle = GLES20.glGetUniformLocation(sceneProgram, "uCurrentAspect")
-        scenePreviousAspectHandle = GLES20.glGetUniformLocation(sceneProgram, "uPreviousAspect")
-        sceneCurrentTextureHandle = GLES20.glGetUniformLocation(sceneProgram, "uCurrentTexture")
-        scenePreviousTextureHandle = GLES20.glGetUniformLocation(sceneProgram, "uPreviousTexture")
+        spritePositionHandle = GLES20.glGetAttribLocation(spriteProgram, "aPosition")
+        spriteTexCoordHandle = GLES20.glGetAttribLocation(spriteProgram, "aTexCoord")
+        spriteTextureHandle = GLES20.glGetUniformLocation(spriteProgram, "uTexture")
+        spriteAspectHandle = GLES20.glGetUniformLocation(spriteProgram, "uTextureAspect")
+
+        twistPositionHandle = GLES20.glGetAttribLocation(twistProgram, "aPosition")
+        twistTexCoordHandle = GLES20.glGetAttribLocation(twistProgram, "aTexCoord")
+        twistPreviousTextureHandle = GLES20.glGetUniformLocation(twistProgram, "uPreviousTexture")
+        twistCurrentTextureHandle = GLES20.glGetUniformLocation(twistProgram, "uCurrentTexture")
+        twistResolutionHandle = GLES20.glGetUniformLocation(twistProgram, "uResolution")
+        twistTransitionHandle = GLES20.glGetUniformLocation(twistProgram, "uTransition")
+        twistAngleHandle = GLES20.glGetUniformLocation(twistProgram, "uAngle")
+        twistRadiusHandle = GLES20.glGetUniformLocation(twistProgram, "uRadius")
+        twistOffsetHandle = GLES20.glGetUniformLocation(twistProgram, "uOffset")
+        twistCropHandle = GLES20.glGetUniformLocation(twistProgram, "uCrop")
 
         blurPositionHandle = GLES20.glGetAttribLocation(blurProgram, "aPosition")
         blurTexCoordHandle = GLES20.glGetAttribLocation(blurProgram, "aTexCoord")
@@ -136,6 +167,11 @@ class AlbumBackdropRenderer(
         blurApplyVignetteHandle = GLES20.glGetUniformLocation(blurProgram, "uApplyVignette")
         blurKawaseOffsetHandle = GLES20.glGetUniformLocation(blurProgram, "uKawaseOffset")
         blurSaturationHandle = GLES20.glGetUniformLocation(blurProgram, "uSaturation")
+
+        presentPositionHandle = GLES20.glGetAttribLocation(presentProgram, "aPosition")
+        presentTexCoordHandle = GLES20.glGetAttribLocation(presentProgram, "aTexCoord")
+        presentTextureHandle = GLES20.glGetUniformLocation(presentProgram, "uTexture")
+        presentSaturationHandle = GLES20.glGetUniformLocation(presentProgram, "uSaturation")
 
         GLES20.glGenTextures(sourceTextureIds.size, sourceTextureIds, 0)
         sourceTextureIds.forEach(::configureTexture)
@@ -162,7 +198,7 @@ class AlbumBackdropRenderer(
         }
 
         val transition = if (shouldAnimateTransition) {
-            ((SystemClock.elapsedRealtime() - transitionStartMs).toFloat() / transitionDurationMs.toFloat())
+            ((SystemClock.elapsedRealtime() - transitionStartMs).toFloat() / TRANSITION_DURATION_MS.toFloat())
                 .coerceIn(0f, 1f)
                 .also { progress ->
                     if (progress >= 1f) {
@@ -173,43 +209,62 @@ class AlbumBackdropRenderer(
             1f
         }
 
-        val passCount = blurPassCount.coerceIn(0, KAWASE_OFFSETS.size)
+        val timeSeconds = ((SystemClock.elapsedRealtime() - startTimeMs) / 1000f) % timeWrapPeriod
 
-        if (passCount > 0) {
-            // Pass 1: render scene to FBO 0
-            renderScene(
+        composeArtworkField(
+            outputFramebuffer = framebufferIds[1],
+            textureId = sourceTextureIds[0],
+            aspectRatio = currentAspectRatio,
+            seed = currentSeed,
+            width = offscreenWidth,
+            height = offscreenHeight,
+            timeSeconds = timeSeconds,
+        )
+
+        val needsPreviousCompose = transition < 0.999f
+        if (needsPreviousCompose) {
+            composeArtworkField(
                 outputFramebuffer = framebufferIds[0],
+                textureId = sourceTextureIds[1],
+                aspectRatio = previousAspectRatio,
+                seed = previousSeed,
                 width = offscreenWidth,
                 height = offscreenHeight,
-                transition = transition,
-            )
-
-            // Stacked Kawase blur passes, ping-ponging between FBOs.
-            for (i in 0 until passCount) {
-                val isLastPass = i == passCount - 1
-                val inputTexture = framebufferTextureIds[i % 2]
-                val outputFbo = if (isLastPass) 0 else framebufferIds[(i + 1) % 2]
-                val outputWidth = if (isLastPass) viewportWidth else offscreenWidth
-                val outputHeight = if (isLastPass) viewportHeight else offscreenHeight
-
-                kawaseBlurPass(
-                    inputTexture = inputTexture,
-                    outputFramebuffer = outputFbo,
-                    width = outputWidth,
-                    height = outputHeight,
-                    kawaseOffset = KAWASE_OFFSETS[i],
-                    applyVignette = isLastPass,
-                    saturation = if (isLastPass) SATURATION else 1f,
-                )
-            }
-        } else {
-            renderScene(
-                outputFramebuffer = 0,
-                width = viewportWidth,
-                height = viewportHeight,
-                transition = transition,
+                timeSeconds = timeSeconds,
             )
         }
+
+        twistAndMixPass(
+            previousTexture = if (needsPreviousCompose) framebufferTextureIds[0] else framebufferTextureIds[1],
+            currentTexture = framebufferTextureIds[1],
+            outputFramebuffer = framebufferIds[2],
+            width = offscreenWidth,
+            height = offscreenHeight,
+            transition = transition,
+        )
+
+        val passCount = blurPassCount.coerceIn(0, KAWASE_OFFSETS.size)
+        var inputTexture = framebufferTextureIds[2]
+        var outputIndex = 0
+
+        for (i in 0 until passCount) {
+            kawaseBlurPass(
+                inputTexture = inputTexture,
+                outputFramebuffer = framebufferIds[outputIndex],
+                width = offscreenWidth,
+                height = offscreenHeight,
+                kawaseOffset = KAWASE_OFFSETS[i],
+                applyVignette = false,
+                saturation = 1f,
+            )
+            inputTexture = framebufferTextureIds[outputIndex]
+            outputIndex = if (outputIndex == 0) 1 else 0
+        }
+
+        presentPass(
+            inputTexture = inputTexture,
+            saturation = SATURATION,
+        )
     }
 
     internal fun setTransitionState(state: BackdropTransitionState) {
@@ -226,6 +281,43 @@ class AlbumBackdropRenderer(
 
     internal val maxBlurPasses: Int get() = KAWASE_OFFSETS.size
 
+    internal fun release() {
+        if (!surfaceReady) {
+            return
+        }
+
+        if (spriteProgram != 0) {
+            GLES20.glDeleteProgram(spriteProgram)
+            spriteProgram = 0
+        }
+        if (twistProgram != 0) {
+            GLES20.glDeleteProgram(twistProgram)
+            twistProgram = 0
+        }
+        if (blurProgram != 0) {
+            GLES20.glDeleteProgram(blurProgram)
+            blurProgram = 0
+        }
+        if (presentProgram != 0) {
+            GLES20.glDeleteProgram(presentProgram)
+            presentProgram = 0
+        }
+        if (sourceTextureIds.any { it != 0 }) {
+            GLES20.glDeleteTextures(sourceTextureIds.size, sourceTextureIds, 0)
+            sourceTextureIds = IntArray(2)
+        }
+        if (framebufferIds.any { it != 0 }) {
+            GLES20.glDeleteFramebuffers(framebufferIds.size, framebufferIds, 0)
+            framebufferIds = IntArray(3)
+        }
+        if (framebufferTextureIds.any { it != 0 }) {
+            GLES20.glDeleteTextures(framebufferTextureIds.size, framebufferTextureIds, 0)
+            framebufferTextureIds = IntArray(3)
+        }
+
+        surfaceReady = false
+    }
+
     private fun applyTransitionState(state: BackdropTransitionState) {
         uploadBitmap(sourceTextureIds[0], state.current.bitmap)
         currentAspectRatio = state.current.aspectRatio
@@ -240,7 +332,63 @@ class AlbumBackdropRenderer(
         transitionStartMs = SystemClock.elapsedRealtime()
     }
 
-    private fun renderScene(
+    private fun composeArtworkField(
+        outputFramebuffer: Int,
+        textureId: Int,
+        aspectRatio: Float,
+        seed: BackdropSeed,
+        width: Int,
+        height: Int,
+        timeSeconds: Float,
+    ) {
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer)
+        GLES20.glViewport(0, 0, width, height)
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+        GLES20.glUseProgram(spriteProgram)
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, textureId)
+        GLES20.glUniform1i(spriteTextureHandle, 0)
+        GLES20.glUniform1f(spriteAspectHandle, aspectRatio)
+
+        val widthF = width.toFloat()
+        val heightF = height.toFloat()
+        val centerX = widthF * 0.5f
+        val centerY = heightF * 0.5f
+        val orbitRadius = widthF * 0.25f
+        val phase0 = seed.x * TAU
+        val phase1 = seed.y * TAU
+        val phase2 = seed.z * TAU
+        val phase3 = seed.w * TAU
+
+        val rot0 = phase0 + SPRITE_ROTATION_SPEEDS[0] * timeSeconds
+        val rot1 = phase1 + SPRITE_ROTATION_SPEEDS[1] * timeSeconds
+        val rot2 = phase2 + SPRITE_ROTATION_SPEEDS[2] * timeSeconds
+        val rot3 = phase3 + SPRITE_ROTATION_SPEEDS[3] * timeSeconds
+
+        drawSprite(width, height, centerX, centerY, widthF * SPRITE_SIZE_FACTORS[0] * SCENE_ZOOM, rot0)
+        drawSprite(width, height, widthF / 2.5f, heightF / 2.5f, widthF * SPRITE_SIZE_FACTORS[1] * SCENE_ZOOM, rot1)
+        drawSprite(
+            width,
+            height,
+            centerX + orbitRadius * cos(rot2 * 0.75f),
+            centerY + orbitRadius * sin(rot2 * 0.75f),
+            widthF * SPRITE_SIZE_FACTORS[2] * SCENE_ZOOM,
+            rot2,
+        )
+        drawSprite(
+            width,
+            height,
+            centerX + widthF * 0.05f + orbitRadius * cos(rot3 * 0.75f),
+            centerY + widthF * 0.05f + orbitRadius * sin(rot3 * 0.75f),
+            widthF * SPRITE_SIZE_FACTORS[3] * SCENE_ZOOM,
+            rot3,
+        )
+    }
+
+    private fun twistAndMixPass(
+        previousTexture: Int,
+        currentTexture: Int,
         outputFramebuffer: Int,
         width: Int,
         height: Int,
@@ -249,25 +397,30 @@ class AlbumBackdropRenderer(
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, outputFramebuffer)
         GLES20.glViewport(0, 0, width, height)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-        GLES20.glUseProgram(sceneProgram)
+        GLES20.glUseProgram(twistProgram)
 
-        bindQuad(scenePositionHandle, sceneTexCoordHandle)
-
-        GLES20.glUniform2f(sceneResolutionHandle, width.toFloat(), height.toFloat())
-        GLES20.glUniform1f(sceneTimeHandle, ((SystemClock.elapsedRealtime() - startTimeMs) / 1000f) % timeWrapPeriod)
-        GLES20.glUniform1f(sceneTransitionHandle, transition)
-        GLES20.glUniform4fv(sceneCurrentSeedHandle, 1, currentSeed.toUniformArray(), 0)
-        GLES20.glUniform4fv(scenePreviousSeedHandle, 1, previousSeed.toUniformArray(), 0)
-        GLES20.glUniform1f(sceneCurrentAspectHandle, currentAspectRatio)
-        GLES20.glUniform1f(scenePreviousAspectHandle, previousAspectRatio)
+        bindQuad(
+            buffer = fullscreenQuad,
+            positionHandle = twistPositionHandle,
+            texCoordHandle = twistTexCoordHandle,
+        )
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sourceTextureIds[0])
-        GLES20.glUniform1i(sceneCurrentTextureHandle, 0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, previousTexture)
+        GLES20.glUniform1i(twistPreviousTextureHandle, 0)
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE1)
-        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, sourceTextureIds[1])
-        GLES20.glUniform1i(scenePreviousTextureHandle, 1)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, currentTexture)
+        GLES20.glUniform1i(twistCurrentTextureHandle, 1)
+
+        val widthF = width.toFloat()
+        val heightF = height.toFloat()
+        GLES20.glUniform2f(twistResolutionHandle, widthF, heightF)
+        GLES20.glUniform1f(twistTransitionHandle, transition)
+        GLES20.glUniform1f(twistAngleHandle, TWIST_ANGLE)
+        GLES20.glUniform1f(twistRadiusHandle, maxOf(widthF, heightF) * 0.72f)
+        GLES20.glUniform2f(twistOffsetHandle, widthF * 0.5f, heightF * 0.5f)
+        GLES20.glUniform1f(twistCropHandle, TWIST_CROP)
 
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }
@@ -286,7 +439,11 @@ class AlbumBackdropRenderer(
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         GLES20.glUseProgram(blurProgram)
 
-        bindQuad(blurPositionHandle, blurTexCoordHandle)
+        bindQuad(
+            buffer = fullscreenQuad,
+            positionHandle = blurPositionHandle,
+            texCoordHandle = blurTexCoordHandle,
+        )
 
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, inputTexture)
@@ -299,13 +456,87 @@ class AlbumBackdropRenderer(
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }
 
-    private fun bindQuad(positionHandle: Int, texCoordHandle: Int) {
-        quadVertices.position(0)
-        GLES20.glVertexAttribPointer(positionHandle, 2, GLES20.GL_FLOAT, false, 16, quadVertices)
+    private fun presentPass(
+        inputTexture: Int,
+        saturation: Float,
+    ) {
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
+        GLES20.glViewport(0, 0, viewportWidth, viewportHeight)
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+        GLES20.glUseProgram(presentProgram)
+
+        bindQuad(
+            buffer = fullscreenQuad,
+            positionHandle = presentPositionHandle,
+            texCoordHandle = presentTexCoordHandle,
+        )
+
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, inputTexture)
+        GLES20.glUniform1i(presentTextureHandle, 0)
+        GLES20.glUniform1f(presentSaturationHandle, saturation)
+
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+    }
+
+    private fun drawSprite(
+        viewportWidth: Int,
+        viewportHeight: Int,
+        centerX: Float,
+        centerY: Float,
+        size: Float,
+        rotation: Float,
+    ) {
+        val half = size * 0.5f
+
+        val topLeft = rotatePoint(-half, -half, rotation)
+        val topRight = rotatePoint(half, -half, rotation)
+        val bottomLeft = rotatePoint(-half, half, rotation)
+        val bottomRight = rotatePoint(half, half, rotation)
+
+        spriteQuad.position(0)
+        spriteQuad.put(
+            floatArrayOf(
+                toNdcX(centerX + bottomLeft.first, viewportWidth), toNdcY(centerY + bottomLeft.second, viewportHeight), 0f, 1f,
+                toNdcX(centerX + bottomRight.first, viewportWidth), toNdcY(centerY + bottomRight.second, viewportHeight), 1f, 1f,
+                toNdcX(centerX + topLeft.first, viewportWidth), toNdcY(centerY + topLeft.second, viewportHeight), 0f, 0f,
+                toNdcX(centerX + topRight.first, viewportWidth), toNdcY(centerY + topRight.second, viewportHeight), 1f, 0f,
+            ),
+        )
+        spriteQuad.position(0)
+
+        bindQuad(
+            buffer = spriteQuad,
+            positionHandle = spritePositionHandle,
+            texCoordHandle = spriteTexCoordHandle,
+        )
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+    }
+
+    private fun rotatePoint(x: Float, y: Float, angle: Float): Pair<Float, Float> {
+        val s = sin(angle)
+        val c = cos(angle)
+        return Pair(
+            x * c - y * s,
+            x * s + y * c,
+        )
+    }
+
+    private fun toNdcX(x: Float, viewportWidth: Int): Float = (x / viewportWidth.toFloat()) * 2f - 1f
+
+    private fun toNdcY(y: Float, viewportHeight: Int): Float = 1f - (y / viewportHeight.toFloat()) * 2f
+
+    private fun bindQuad(
+        buffer: FloatBuffer,
+        positionHandle: Int,
+        texCoordHandle: Int,
+    ) {
+        buffer.position(0)
+        GLES20.glVertexAttribPointer(positionHandle, 2, GLES20.GL_FLOAT, false, 16, buffer)
         GLES20.glEnableVertexAttribArray(positionHandle)
 
-        quadVertices.position(2)
-        GLES20.glVertexAttribPointer(texCoordHandle, 2, GLES20.GL_FLOAT, false, 16, quadVertices)
+        buffer.position(2)
+        GLES20.glVertexAttribPointer(texCoordHandle, 2, GLES20.GL_FLOAT, false, 16, buffer)
         GLES20.glEnableVertexAttribArray(texCoordHandle)
     }
 
@@ -315,8 +546,8 @@ class AlbumBackdropRenderer(
             GLES20.glDeleteTextures(framebufferTextureIds.size, framebufferTextureIds, 0)
         }
 
-        framebufferIds = IntArray(2)
-        framebufferTextureIds = IntArray(2)
+        framebufferIds = IntArray(3)
+        framebufferTextureIds = IntArray(3)
         GLES20.glGenFramebuffers(framebufferIds.size, framebufferIds, 0)
         GLES20.glGenTextures(framebufferTextureIds.size, framebufferTextureIds, 0)
 

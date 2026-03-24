@@ -145,8 +145,18 @@ vec3 sampleArtworkField(
 }
 
 void main() {
-    vec3 previousField = sampleArtworkField(uPreviousTexture, vTexCoord, uPreviousAspect, uPreviousSeed, uTime);
-    vec3 currentField = sampleArtworkField(uCurrentTexture, vTexCoord, uCurrentAspect, uCurrentSeed, uTime);
-    vec3 color = mix(previousField, currentField, smoothstep(0.0, 1.0, uTransition));
+    float transition = smoothstep(0.0, 1.0, uTransition);
+    vec3 color;
+
+    if (transition <= 0.001) {
+        color = sampleArtworkField(uPreviousTexture, vTexCoord, uPreviousAspect, uPreviousSeed, uTime);
+    } else if (transition >= 0.999) {
+        color = sampleArtworkField(uCurrentTexture, vTexCoord, uCurrentAspect, uCurrentSeed, uTime);
+    } else {
+        vec3 previousField = sampleArtworkField(uPreviousTexture, vTexCoord, uPreviousAspect, uPreviousSeed, uTime);
+        vec3 currentField = sampleArtworkField(uCurrentTexture, vTexCoord, uCurrentAspect, uCurrentSeed, uTime);
+        color = mix(previousField, currentField, transition);
+    }
+
     gl_FragColor = vec4(color, 1.0);
 }

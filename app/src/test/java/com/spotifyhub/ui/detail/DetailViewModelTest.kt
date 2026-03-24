@@ -21,6 +21,7 @@ import com.spotifyhub.spotify.dto.library.TrackPagingDto
 import com.spotifyhub.spotify.dto.player.ArtistDto
 import com.spotifyhub.spotify.dto.player.ImageDto
 import com.spotifyhub.spotify.dto.player.PlaybackResponseDto
+import com.spotifyhub.spotify.dto.player.QueueResponseDto
 import com.spotifyhub.spotify.dto.search.SearchResponseDto
 import com.spotifyhub.spotify.dto.search.SimplifiedAlbumDto
 import com.spotifyhub.spotify.dto.wikipedia.WikipediaContentUrlsDto
@@ -184,5 +185,6 @@ class DetailViewModelTest {
         override suspend fun setVolume(volumePercent: Int) = Unit
         override suspend fun seekTo(positionMs: Long) = Unit
         override suspend fun playContext(body: PlayContextBody) = Unit
+        override suspend fun getQueue(): QueueResponseDto? = null
     }
 }

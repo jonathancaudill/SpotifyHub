@@ -10,6 +10,7 @@ import android.graphics.Shader
 import android.util.LruCache
 import androidx.core.graphics.drawable.toBitmap
 import coil.ImageLoader
+import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import kotlin.math.max
@@ -23,10 +24,18 @@ class AlbumBackdropController(
     private val appContext: Context,
     private val scope: CoroutineScope,
 ) {
+    private companion object {
+        const val BITMAP_SIZE = 512
+        const val BITMAP_CACHE_BYTES = 4 * BITMAP_SIZE * BITMAP_SIZE * 4
+    }
+
     private val imageLoader = ImageLoader.Builder(appContext)
         .allowHardware(false)
+        .memoryCachePolicy(CachePolicy.DISABLED)
         .build()
-    private val bitmapCache = LruCache<String, Bitmap>(8)
+    private val bitmapCache = object : LruCache<String, Bitmap>(BITMAP_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
     private val idleBitmap = createIdleBitmap()
     private val idleSlot = BackdropTextureSlot(
         bitmap = idleBitmap,
@@ -40,6 +49,7 @@ class AlbumBackdropController(
     private var loadJob: Job? = null
     private var currentSlot: BackdropTextureSlot = idleSlot
     private var currentArtworkUrl: String? = null
+    private var currentArtworkKey: String? = null
     private var isStarted = false
 
     fun bindRenderer(renderer: AlbumBackdropRenderer) {
@@ -63,11 +73,12 @@ class AlbumBackdropController(
     }
 
     fun setArtwork(artworkUrl: String?, artworkKey: String?) {
-        if (artworkUrl == currentArtworkUrl) {
+        if (artworkUrl == currentArtworkUrl && artworkKey == currentArtworkKey) {
             return
         }
 
         currentArtworkUrl = artworkUrl
+        currentArtworkKey = artworkKey
         loadJob?.cancel()
         val previousSlot = currentSlot
         val seedKey = artworkKey?.takeIf(String::isNotBlank) ?: artworkUrl ?: "idle"
@@ -89,6 +100,10 @@ class AlbumBackdropController(
             currentSlot = nextSlot
             pushState(previous = previousSlot.takeUnless { it.key == nextSlot.key }, animate = previousSlot.key != nextSlot.key)
         }
+    }
+
+    fun refreshCurrentState() {
+        pushState(previous = null, animate = false)
     }
 
     private fun pushState(previous: BackdropTextureSlot?, animate: Boolean) {
@@ -114,13 +129,13 @@ class AlbumBackdropController(
         val request = ImageRequest.Builder(appContext)
             .data(artworkUrl)
             .allowHardware(false)
-            .size(512, 512)
+            .size(BITMAP_SIZE, BITMAP_SIZE)
             .build()
 
         val result = imageLoader.execute(request) as? SuccessResult ?: return@withContext null
         val bitmap = result.drawable.toBitmap(
-            width = 512,
-            height = 512,
+            width = BITMAP_SIZE,
+            height = BITMAP_SIZE,
             config = Bitmap.Config.ARGB_8888,
         )
         bitmapCache.put(artworkUrl, bitmap)
@@ -128,14 +143,14 @@ class AlbumBackdropController(
     }
 
     private fun createIdleBitmap(): Bitmap {
-        return Bitmap.createBitmap(512, 512, Bitmap.Config.ARGB_8888).also { bitmap ->
+        return Bitmap.createBitmap(BITMAP_SIZE, BITMAP_SIZE, Bitmap.Config.ARGB_8888).also { bitmap ->
             val canvas = Canvas(bitmap)
             val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 shader = LinearGradient(
                     0f,
                     0f,
-                    512f,
-                    512f,
+                    BITMAP_SIZE.toFloat(),
+                    BITMAP_SIZE.toFloat(),
                     intArrayOf(
                         android.graphics.Color.rgb(18, 20, 24),
                         android.graphics.Color.rgb(34, 36, 41),

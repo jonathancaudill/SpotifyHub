@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -42,9 +43,11 @@ import coil.request.ImageRequest
 import com.spotifyhub.browse.model.BrowseItem
 import com.spotifyhub.browse.model.BrowseItemType
 import com.spotifyhub.search.model.SearchSection
-import com.spotifyhub.ui.icons.AppIcons
+import com.spotifyhub.ui.common.LandscapeUiProfile
 import com.spotifyhub.ui.common.NowPlayingIndicator
 import com.spotifyhub.ui.common.bounceOverscroll
+import com.spotifyhub.ui.common.rememberLandscapeUiProfile
+import com.spotifyhub.ui.icons.AppIcons
 
 private val BrowseBackground = Color(0xFF171A1F)
 private val SearchBarBackground = Color(0xFF2A2A2A)
@@ -59,120 +62,127 @@ fun SearchScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Column(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
-            .background(BrowseBackground)
-            .padding(horizontal = 16.dp),
+            .background(BrowseBackground),
     ) {
-        Spacer(modifier = Modifier.height(12.dp))
+        val profile = rememberLandscapeUiProfile(maxWidth = maxWidth, maxHeight = maxHeight)
 
-        /* Search bar */
-        SearchBar(
-            query = uiState.query,
-            onQueryChange = viewModel::updateQuery,
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+        ) {
+            Spacer(modifier = Modifier.height(12.dp))
 
-        Spacer(modifier = Modifier.height(16.dp))
+            SearchBar(
+                profile = profile,
+                query = uiState.query,
+                onQueryChange = viewModel::updateQuery,
+            )
 
-        /* Results */
-        when {
-            uiState.isSearching -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator(color = SpotifyGreen)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            when {
+                uiState.isSearching -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(color = SpotifyGreen)
+                    }
                 }
-            }
 
-            uiState.query.isBlank() -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "Search for songs, artists, albums, or playlists",
-                        color = Color.White.copy(alpha = 0.5f),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                uiState.query.isBlank() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "Search for songs, artists, albums, or playlists",
+                            color = Color.White.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
-            }
 
-            uiState.error != null -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "Search is temporarily unavailable. ${uiState.error}",
-                        color = Color.White.copy(alpha = 0.6f),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(horizontal = 24.dp),
-                    )
+                uiState.error != null -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "Search is temporarily unavailable. ${uiState.error}",
+                            color = Color.White.copy(alpha = 0.6f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 24.dp),
+                        )
+                    }
                 }
-            }
 
-            uiState.results != null && uiState.results!!.isEmpty -> {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "No results found for \"${uiState.query}\"",
-                        color = Color.White.copy(alpha = 0.5f),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                uiState.results != null && uiState.results!!.isEmpty -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "No results found for \"${uiState.query}\"",
+                            color = Color.White.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
-            }
 
-            uiState.results != null -> {
-                val results = uiState.results!!
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .bounceOverscroll(orientation = Orientation.Vertical),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    results.sectionOrder.forEach { section ->
-                        when (section) {
-                            SearchSection.Tracks -> {
-                                item {
-                                    SectionHeader("Songs")
+                uiState.results != null -> {
+                    val results = uiState.results!!
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .bounceOverscroll(orientation = Orientation.Vertical),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        results.sectionOrder.forEach { section ->
+                            when (section) {
+                                SearchSection.Tracks -> {
+                                    item {
+                                        SectionHeader(profile = profile, title = "Songs")
+                                    }
+                                    items(results.tracks, key = { "track-${it.id}" }) { item ->
+                                        SearchResultRow(
+                                            profile = profile,
+                                            item = item,
+                                            isNowPlaying = isPlaybackActive && currentTrackId == item.id,
+                                            onClick = { onItemClick(item) },
+                                        )
+                                    }
                                 }
-                                items(results.tracks, key = { "track-${it.id}" }) { item ->
-                                    SearchResultRow(
-                                        item = item,
-                                        isNowPlaying = isPlaybackActive && currentTrackId == item.id,
-                                        onClick = { onItemClick(item) },
-                                    )
-                                }
-                            }
 
-                            SearchSection.Artists -> {
-                                item {
-                                    SectionHeader("Artists")
+                                SearchSection.Artists -> {
+                                    item {
+                                        SectionHeader(profile = profile, title = "Artists")
+                                    }
+                                    items(results.artists, key = { "artist-${it.id}" }) { item ->
+                                        SearchResultRow(profile = profile, item = item, isNowPlaying = false, onClick = { onItemClick(item) })
+                                    }
                                 }
-                                items(results.artists, key = { "artist-${it.id}" }) { item ->
-                                    SearchResultRow(item = item, isNowPlaying = false, onClick = { onItemClick(item) })
-                                }
-                            }
 
-                            SearchSection.Albums -> {
-                                item {
-                                    SectionHeader("Albums")
+                                SearchSection.Albums -> {
+                                    item {
+                                        SectionHeader(profile = profile, title = "Albums")
+                                    }
+                                    items(results.albums, key = { "album-${it.id}" }) { item ->
+                                        SearchResultRow(profile = profile, item = item, isNowPlaying = false, onClick = { onItemClick(item) })
+                                    }
                                 }
-                                items(results.albums, key = { "album-${it.id}" }) { item ->
-                                    SearchResultRow(item = item, isNowPlaying = false, onClick = { onItemClick(item) })
-                                }
-                            }
 
-                            SearchSection.Playlists -> {
-                                item {
-                                    SectionHeader("Playlists")
-                                }
-                                items(results.playlists, key = { "playlist-${it.id}" }) { item ->
-                                    SearchResultRow(item = item, isNowPlaying = false, onClick = { onItemClick(item) })
+                                SearchSection.Playlists -> {
+                                    item {
+                                        SectionHeader(profile = profile, title = "Playlists")
+                                    }
+                                    items(results.playlists, key = { "playlist-${it.id}" }) { item ->
+                                        SearchResultRow(profile = profile, item = item, isNowPlaying = false, onClick = { onItemClick(item) })
+                                    }
                                 }
                             }
                         }
@@ -185,13 +195,14 @@ fun SearchScreen(
 
 @Composable
 private fun SearchBar(
+    profile: LandscapeUiProfile,
     query: String,
     onQueryChange: (String) -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(44.dp)
+            .height(profile.searchBarHeight)
             .clip(SquircleShape(22.dp))
             .background(SearchBarBackground)
             .padding(horizontal = 16.dp),
@@ -217,7 +228,7 @@ private fun SearchBar(
                 onValueChange = onQueryChange,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
                     color = Color.White,
-                    fontSize = 15.sp,
+                    fontSize = profile.searchInputSize,
                 ),
                 singleLine = true,
                 cursorBrush = SolidColor(SpotifyGreen),
@@ -228,13 +239,16 @@ private fun SearchBar(
 }
 
 @Composable
-private fun SectionHeader(title: String) {
+private fun SectionHeader(
+    profile: LandscapeUiProfile,
+    title: String,
+) {
     Text(
         text = title,
         color = Color.White,
         style = MaterialTheme.typography.titleSmall.copy(
             fontWeight = FontWeight.Bold,
-            fontSize = 16.sp,
+            fontSize = profile.searchSectionHeaderSize,
         ),
         modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
     )
@@ -242,6 +256,7 @@ private fun SectionHeader(title: String) {
 
 @Composable
 private fun SearchResultRow(
+    profile: LandscapeUiProfile,
     item: BrowseItem,
     isNowPlaying: Boolean,
     onClick: () -> Unit,
@@ -253,7 +268,7 @@ private fun SearchResultRow(
             .clip(SquircleShape(8.dp))
             .background(if (isNowPlaying) SpotifyGreen.copy(alpha = 0.08f) else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 8.dp, vertical = profile.searchResultVerticalPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {

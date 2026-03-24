@@ -11,6 +11,7 @@ import com.spotifyhub.spotify.mapper.PlaybackMapper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,9 +32,6 @@ class PlaybackRepository(
     private val _currentItemSaved = MutableStateFlow<Boolean?>(null)
     val currentItemSaved: StateFlow<Boolean?> = _currentItemSaved.asStateFlow()
 
-    private val _isRefreshing = MutableStateFlow(false)
-    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
-
     private var pollingJob: Job? = null
     private var lastKnownSavedItemUri: String? = null
 
@@ -53,9 +51,17 @@ class PlaybackRepository(
     @Volatile
     private var cachedPreviousItem: PlaybackItem? = null
 
+    /** Guards skip transitions so stale polls cannot snap back to the track we just left. */
+    @Volatile
+    private var pendingTransportTransition: PendingTransportTransition? = null
+
+    /** Prevents ad-hoc refreshes from piling on top of the polling loop. */
+    private val fetchMutex = Mutex()
+
     companion object {
         /** How long (ms) optimistic local state is protected from being overwritten by polling. */
         private const val OPTIMISTIC_GRACE_MS = 5_000L
+        private const val POLL_INTERVAL_MS = 1_000L
     }
 
     init {
@@ -80,7 +86,7 @@ class PlaybackRepository(
         pollingJob = appScope.launch {
             while (true) {
                 fetchPlayback()
-                delay(1_500L)
+                delay(POLL_INTERVAL_MS)
             }
         }
     }
@@ -90,53 +96,64 @@ class PlaybackRepository(
         pollingJob = null
         _playbackState.value = null
         _currentItemSaved.value = null
-        _isRefreshing.value = false
         optimisticUntil = 0L
         lastKnownSavedItemUri = null
         cachedNextItem = null
         cachedPreviousItem = null
+        pendingTransportTransition = null
     }
 
     private suspend fun fetchPlayback() {
-        _isRefreshing.value = true
-        val inGracePeriod = System.currentTimeMillis() < optimisticUntil
+        fetchMutex.withLock {
+            coroutineScope {
+                val inGracePeriod = System.currentTimeMillis() < optimisticUntil
 
-        // Fetch playback state and queue in parallel.
-        val playbackDeferred = appScope.async { runCatching { playerApi.getCurrentPlayback() } }
-        val queueDeferred = appScope.async { runCatching { playerApi.getQueue() } }
+                // Fetch playback state and queue in parallel within this refresh call so
+                // cancellation stops both requests instead of leaving detached app-scope work behind.
+                val playbackDeferred = async { runCatching { playerApi.getCurrentPlayback() } }
+                val queueDeferred = async { runCatching { playerApi.getQueue() } }
 
-        playbackDeferred.await()
-            .onSuccess { dto ->
-                val playback = PlaybackMapper.map(dto)
-                val songChanged = playback?.item?.id != _playbackState.value?.item?.id
-                if (!inGracePeriod || songChanged) {
-                    // Rotate the outgoing track into previousItem when the song changes.
-                    if (songChanged) {
-                        cachedPreviousItem = _playbackState.value?.item
-                        optimisticUntil = 0L
+                playbackDeferred.await()
+                    .onSuccess { dto ->
+                        val playback = PlaybackMapper.map(dto)
+                        val songChanged = playback?.item?.id != _playbackState.value?.item?.id
+                        if (!shouldIgnorePlaybackUpdate(playback, inGracePeriod)) {
+                            // Rotate the outgoing track into previousItem when the song changes.
+                            if (songChanged) {
+                                cachedPreviousItem = _playbackState.value?.item
+                            }
+                            _playbackState.value = playback
+                            val transition = pendingTransportTransition
+                            if (playback?.item?.id == transition?.targetItemId) {
+                                pendingTransportTransition = null
+                                optimisticUntil = 0L
+                            } else if (!inGracePeriod) {
+                                pendingTransportTransition = null
+                            }
+                        }
+                        syncCurrentItemSavedState(playback?.item?.uri)
                     }
-                    _playbackState.value = playback
-                }
-                syncCurrentItemSavedState(playback?.item?.uri)
-            }
-            .onFailure {
-                if (!inGracePeriod) {
-                    _playbackState.value = null
-                    _currentItemSaved.value = null
-                    lastKnownSavedItemUri = null
-                }
-            }
+                    .onFailure {
+                        if (!inGracePeriod) {
+                            _playbackState.value = null
+                            _currentItemSaved.value = null
+                            lastKnownSavedItemUri = null
+                        }
+                    }
 
-        // Update the adjacent-track cache from the queue response.
-        queueDeferred.await()
-            .onSuccess { queueDto ->
-                cachedNextItem = queueDto?.queue?.firstOrNull()?.let { PlaybackMapper.mapItem(it) }
+                // Update the adjacent-track cache from the queue response.
+                queueDeferred.await()
+                    .onSuccess { queueDto ->
+                        val queuedNextItem = queueDto?.queue?.firstOrNull()?.let { PlaybackMapper.mapItem(it) }
+                        if (!shouldIgnoreQueuedNextUpdate(queuedNextItem, inGracePeriod)) {
+                            cachedNextItem = queuedNextItem
+                        }
+                    }
+                    .onFailure {
+                        // Queue fetch failed — stale cache is better than no cache; leave it as-is.
+                    }
+                }
             }
-            .onFailure {
-                // Queue fetch failed — stale cache is better than no cache; leave it as-is.
-            }
-
-        _isRefreshing.value = false
     }
 
     // ── Optimistic update helpers ────────────────────────────────────────
@@ -146,6 +163,30 @@ class PlaybackRepository(
         val current = _playbackState.value ?: return
         _playbackState.value = current.mutate()
         optimisticUntil = System.currentTimeMillis() + OPTIMISTIC_GRACE_MS
+    }
+
+    private fun shouldIgnorePlaybackUpdate(
+        playback: PlaybackSnapshot?,
+        inGracePeriod: Boolean,
+    ): Boolean {
+        if (!inGracePeriod) {
+            return false
+        }
+
+        val transition = pendingTransportTransition ?: return playback?.item?.id == _playbackState.value?.item?.id
+        val playbackItemId = playback?.item?.id
+        return playbackItemId == transition.sourceItemId
+    }
+
+    private fun shouldIgnoreQueuedNextUpdate(
+        queuedNextItem: PlaybackItem?,
+        inGracePeriod: Boolean,
+    ): Boolean {
+        if (!inGracePeriod) {
+            return false
+        }
+
+        return queuedNextItem?.id == _playbackState.value?.item?.id
     }
 
     /** Fire the API command in the background, serialized by the mutex. */
@@ -195,11 +236,16 @@ class PlaybackRepository(
             cachedPreviousItem = currentItem
             cachedNextItem = null // consumed — will be refreshed on next poll
         }
+        pendingTransportTransition = PendingTransportTransition(
+            sourceItemId = currentItem?.id,
+            targetItemId = next?.id,
+        )
         fireCommand { playerApi.skipNext() }
     }
 
     fun skipPrevious() {
         val prev = cachedPreviousItem
+        val currentItem = _playbackState.value?.item
         applyOptimistic {
             copy(
                 progressMs = 0L,
@@ -211,6 +257,10 @@ class PlaybackRepository(
         if (prev != null) {
             cachedPreviousItem = null // consumed — will be refreshed on next poll
         }
+        pendingTransportTransition = PendingTransportTransition(
+            sourceItemId = currentItem?.id,
+            targetItemId = prev?.id,
+        )
         fireCommand { playerApi.skipPrevious() }
     }
 
@@ -320,4 +370,9 @@ class PlaybackRepository(
             RepeatMode.Track -> "track"
         }
     }
+
+    private data class PendingTransportTransition(
+        val sourceItemId: String?,
+        val targetItemId: String?,
+    )
 }

@@ -6,7 +6,7 @@ data class BackdropSeed(
     val z: Float,
     val w: Float,
 ) {
-    fun toUniformArray(): FloatArray = floatArrayOf(x, y, z, w)
+    val uniformArray: FloatArray = floatArrayOf(x, y, z, w)
 }
 
 object BackdropSeedFactory {

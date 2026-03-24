@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -45,8 +46,10 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.spotifyhub.library.model.LibraryItem
 import com.spotifyhub.library.model.LibraryItemType
+import com.spotifyhub.ui.common.LandscapeUiProfile
 import com.spotifyhub.ui.common.NowPlayingIndicator
 import com.spotifyhub.ui.common.bounceOverscroll
+import com.spotifyhub.ui.common.rememberLandscapeUiProfile
 import com.spotifyhub.ui.detail.DetailViewModel
 
 private val BrowseBackground = Color(0xFF171A1F)
@@ -64,49 +67,53 @@ fun LibraryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Column(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(BrowseBackground),
     ) {
-        Spacer(modifier = Modifier.height(12.dp))
+        val profile = rememberLandscapeUiProfile(maxWidth = maxWidth, maxHeight = maxHeight)
 
-        /* Category chips */
-        Text(
-            text = "Your Library",
-            color = Color.White,
-            style = MaterialTheme.typography.headlineSmall.copy(
-                fontWeight = FontWeight.Bold,
-                fontSize = 24.sp,
-            ),
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        LazyRow(
-            modifier = Modifier.bounceOverscroll(orientation = Orientation.Horizontal),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Column(
+            modifier = Modifier.fillMaxSize(),
         ) {
-            val categories = listOf(
-                LibraryCategory.Playlists to "Playlists",
-                LibraryCategory.Albums to "Albums",
-                LibraryCategory.Tracks to "Liked Songs",
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = "Your Library",
+                color = Color.White,
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = profile.libraryTitleSize,
+                ),
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
-            items(categories, key = { it.first }) { (category, label) ->
-                CategoryChip(
-                    label = label,
-                    isSelected = uiState.selectedCategory == category,
-                    onClick = { viewModel.selectCategory(category) },
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            LazyRow(
+                modifier = Modifier.bounceOverscroll(orientation = Orientation.Horizontal),
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val categories = listOf(
+                    LibraryCategory.Playlists to "Playlists",
+                    LibraryCategory.Albums to "Albums",
+                    LibraryCategory.Tracks to "Liked Songs",
                 )
+                items(categories, key = { it.first }) { (category, label) ->
+                    CategoryChip(
+                        profile = profile,
+                        label = label,
+                        isSelected = uiState.selectedCategory == category,
+                        onClick = { viewModel.selectCategory(category) },
+                    )
+                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-        /* Content */
-        when {
+            when {
             uiState.isLoading -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -168,6 +175,7 @@ fun LibraryScreen(
                 ) {
                     items(uiState.items, key = { it.id }) { item ->
                         LibraryItemRow(
+                            profile = profile,
                             item = item,
                             isNowPlaying = isPlaybackActive &&
                                 item.type == LibraryItemType.Track &&
@@ -219,9 +227,11 @@ fun LibraryScreen(
         }
     }
 }
+}
 
 @Composable
 private fun CategoryChip(
+    profile: LandscapeUiProfile,
     label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
@@ -231,14 +241,14 @@ private fun CategoryChip(
             .clip(SquircleShape(20.dp))
             .background(if (isSelected) ChipSelectedBackground else ChipBackground)
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = profile.libraryChipVerticalPadding),
     ) {
         Text(
             text = label,
             color = if (isSelected) Color.White else Color.White.copy(alpha = 0.7f),
             style = MaterialTheme.typography.bodySmall.copy(
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 13.sp,
+                fontSize = profile.libraryChipTextSize,
             ),
         )
     }
@@ -246,6 +256,7 @@ private fun CategoryChip(
 
 @Composable
 private fun LibraryItemRow(
+    profile: LandscapeUiProfile,
     item: LibraryItem,
     isNowPlaying: Boolean,
     onClick: () -> Unit,
@@ -257,7 +268,7 @@ private fun LibraryItemRow(
             .clip(SquircleShape(8.dp))
             .background(if (isNowPlaying) SpotifyGreen.copy(alpha = 0.08f) else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = profile.libraryRowVerticalPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (item.type == LibraryItemType.Track) {

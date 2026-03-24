@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,7 +30,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +52,7 @@ import com.spotifyhub.ui.detail.DetailScreen
 import com.spotifyhub.ui.detail.DetailViewModel
 import com.spotifyhub.ui.home.HomeScreen
 import com.spotifyhub.ui.home.HomeViewModel
+import com.spotifyhub.ui.common.LandscapeUiProfile
 import com.spotifyhub.ui.icons.AppIcons
 import com.spotifyhub.ui.library.LibraryScreen
 import com.spotifyhub.ui.library.LibraryViewModel
@@ -58,6 +63,7 @@ import com.spotifyhub.ui.rating.RatingScreen
 import com.spotifyhub.ui.rating.RatingViewModel
 import com.spotifyhub.ui.search.SearchScreen
 import com.spotifyhub.ui.search.SearchViewModel
+import com.spotifyhub.ui.common.rememberLandscapeUiProfile
 import kotlinx.coroutines.delay
 
 /* ── Tokens ──────────────────────────────────────────────────────── */
@@ -85,11 +91,13 @@ fun MainScreen(
     detailViewModel: DetailViewModel,
     isOffline: Boolean,
 ) {
+    val maxBlurPasses = 8
     val selectedTab by mainViewModel.selectedTab.collectAsStateWithLifecycle()
     val showDetail by mainViewModel.showDetail.collectAsStateWithLifecycle()
-    val playerUiState by playerViewModel.uiState.collectAsStateWithLifecycle()
-    val currentTrackId = playerUiState.playback?.item?.id
-    val isPlaybackActive = playerUiState.playback?.isPlaying == true
+    val playerShellState by playerViewModel.shellState.collectAsStateWithLifecycle()
+    var blurPassCount by rememberSaveable { mutableStateOf(maxBlurPasses) }
+    val currentTrackId = playerShellState.currentTrackId
+    val isPlaybackActive = playerShellState.isPlaybackActive
     val isNowPlayingTab = selectedTab == MainTab.NowPlaying
     val showSwipeDetail = showDetail && !isNowPlayingTab
     val baseOffsetX by animateDpAsState(
@@ -136,14 +144,18 @@ fun MainScreen(
 
     /* Disable Compose's built-in overscroll so custom bounce handles all list surfaces. */
     CompositionLocalProvider(LocalOverscrollFactory provides null) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFF08090B)),
         ) {
+            val profile = rememberLandscapeUiProfile(maxWidth = maxWidth, maxHeight = maxHeight)
+
             NowPlayingBackdropLayer(
-                artworkUrl = playerUiState.playback?.item?.artworkUrl,
-                artworkKey = playerUiState.playback?.item?.id,
+                artworkUrl = playerShellState.artworkUrl,
+                artworkKey = playerShellState.artworkKey,
+                blurPassCount = blurPassCount,
+                isVisible = isNowPlayingTab,
             )
 
             if (!isNowPlayingTab) {
@@ -153,13 +165,17 @@ fun MainScreen(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    .padding(
+                        horizontal = profile.outerHorizontalPadding,
+                        vertical = profile.outerVerticalPadding,
+                    ),
+                horizontalArrangement = Arrangement.spacedBy(profile.contentGap),
             ) {
                 SidebarRail(
                     selectedTab = selectedTab,
                     isOffline = isOffline,
                     onTabSelected = { mainViewModel.selectTab(it) },
+                    profile = profile,
                     modifier = Modifier.fillMaxHeight(),
                 )
 
@@ -213,6 +229,9 @@ fun MainScreen(
                                         viewModel = playerViewModel,
                                         isOffline = isOffline,
                                         renderBackdrop = false,
+                                        blurPassCount = blurPassCount,
+                                        maxBlurPasses = maxBlurPasses,
+                                        onBlurPassCountChange = { blurPassCount = it },
                                     )
                                 }
                             }
@@ -261,38 +280,30 @@ fun MainScreen(
 private fun AppBackdropLayer(
     artworkUrl: String?,
     artworkKey: String?,
+    blurPassCount: Int,
+    isVisible: Boolean,
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        AlbumBackdropHost(
-            artworkUrl = artworkUrl,
-            artworkKey = artworkKey,
-            blurPassCount = 8,
-            modifier = Modifier.fillMaxSize(),
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            Color(0x2808090C),
-                            Color(0x10090A0C),
-                            Color(0x32060709),
-                        ),
-                    ),
-                ),
-        )
-    }
+    AlbumBackdropHost(
+        artworkUrl = artworkUrl,
+        artworkKey = artworkKey,
+        blurPassCount = blurPassCount,
+        isVisible = isVisible,
+        modifier = Modifier.fillMaxSize(),
+    )
 }
 
 @Composable
 private fun NowPlayingBackdropLayer(
     artworkUrl: String?,
     artworkKey: String?,
+    blurPassCount: Int,
+    isVisible: Boolean,
 ) {
     AppBackdropLayer(
         artworkUrl = artworkUrl,
         artworkKey = artworkKey,
+        blurPassCount = blurPassCount,
+        isVisible = isVisible,
     )
 }
 
@@ -320,11 +331,12 @@ private fun SidebarRail(
     selectedTab: MainTab,
     isOffline: Boolean,
     onTabSelected: (MainTab) -> Unit,
+    profile: LandscapeUiProfile,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
-            .width(62.dp)
+            .width(profile.sidebarWidth)
             .clip(SidebarShape)
             .background(SidebarSurface)
             .border(1.dp, SidebarBorder, SidebarShape),
@@ -332,7 +344,10 @@ private fun SidebarRail(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(vertical = 12.dp, horizontal = 6.dp),
+                .padding(
+                    vertical = profile.sidebarVerticalPadding,
+                    horizontal = profile.sidebarHorizontalPadding,
+                ),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
@@ -341,6 +356,7 @@ private fun SidebarRail(
                 text = rememberClockLabel(),
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.SemiBold,
+                    fontSize = profile.clockFontSize,
                     letterSpacing = 0.4.sp,
                 ),
                 color = Color.White,
@@ -349,31 +365,35 @@ private fun SidebarRail(
             /* Center: tab icons */
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(profile.sidebarIconSpacing),
             ) {
                 TabIcon(
                     icon = if (selectedTab == MainTab.Home) AppIcons.homeSelected else AppIcons.home,
                     label = "Home",
                     isSelected = selectedTab == MainTab.Home,
                     onClick = { onTabSelected(MainTab.Home) },
+                    profile = profile,
                 )
                 TabIcon(
                     icon = if (selectedTab == MainTab.Search) AppIcons.searchSelected else AppIcons.search,
                     label = "Search",
                     isSelected = selectedTab == MainTab.Search,
                     onClick = { onTabSelected(MainTab.Search) },
+                    profile = profile,
                 )
                 TabIcon(
                     icon = if (selectedTab == MainTab.Library) AppIcons.librarySelected else AppIcons.library,
                     label = "Library",
                     isSelected = selectedTab == MainTab.Library,
                     onClick = { onTabSelected(MainTab.Library) },
+                    profile = profile,
                 )
                 TabIcon(
                     icon = if (selectedTab == MainTab.Rate) AppIcons.rateSelected else AppIcons.rate,
                     label = "Rate",
                     isSelected = selectedTab == MainTab.Rate,
                     onClick = { onTabSelected(MainTab.Rate) },
+                    profile = profile,
                 )
                 TabIcon(
                     icon = if (selectedTab == MainTab.NowPlaying) {
@@ -384,6 +404,7 @@ private fun SidebarRail(
                     label = "Playing",
                     isSelected = selectedTab == MainTab.NowPlaying,
                     onClick = { onTabSelected(MainTab.NowPlaying) },
+                    profile = profile,
                 )
             }
 
@@ -399,6 +420,7 @@ private fun TabIcon(
     label: String,
     isSelected: Boolean,
     onClick: () -> Unit,
+    profile: LandscapeUiProfile,
 ) {
     val tint = when {
         isSelected -> Color.White
@@ -409,13 +431,14 @@ private fun TabIcon(
         modifier = Modifier
             .clip(SquircleShape(12.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 10.dp),
+            .width(profile.sidebarTouchWidth)
+            .padding(vertical = profile.sidebarTouchVerticalPadding),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            modifier = Modifier.size(26.dp),
+            modifier = Modifier.size(profile.sidebarIconSize),
             tint = tint,
         )
     }
