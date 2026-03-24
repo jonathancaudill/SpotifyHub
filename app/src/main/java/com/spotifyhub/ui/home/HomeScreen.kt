@@ -86,7 +86,7 @@ fun HomeScreen(
                         .fillMaxSize()
                         .bounceOverscroll(orientation = Orientation.Vertical),
                     contentPadding = PaddingValues(vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     /* Greeting */
                     if (uiState.greeting.isNotBlank()) {
@@ -213,8 +213,9 @@ private fun HomeSectionRow(
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp,
             ),
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
+        Spacer(modifier = Modifier.height(10.dp))
 
         LazyRow(
             modifier = Modifier.bounceOverscroll(orientation = Orientation.Horizontal),

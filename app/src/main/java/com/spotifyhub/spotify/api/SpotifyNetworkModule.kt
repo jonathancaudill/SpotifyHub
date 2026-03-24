@@ -67,6 +67,14 @@ object SpotifyNetworkModule {
             .create(SpotifySearchApi::class.java)
     }
 
+    fun createArtistApi(
+        moshi: Moshi,
+        authRepository: SpotifyAuthRepository,
+    ): SpotifyArtistApi {
+        return createAuthenticatedRetrofit(moshi, authRepository)
+            .create(SpotifyArtistApi::class.java)
+    }
+
     fun createEmbedApi(moshi: Moshi): SpotifyEmbedApi {
         return Retrofit.Builder()
             .baseUrl("https://open.spotify.com/")
@@ -74,5 +82,14 @@ object SpotifyNetworkModule {
             .client(OkHttpClient.Builder().build())
             .build()
             .create(SpotifyEmbedApi::class.java)
+    }
+
+    fun createWikipediaApi(moshi: Moshi): WikipediaApi {
+        return Retrofit.Builder()
+            .baseUrl("https://en.wikipedia.org/")
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .client(OkHttpClient.Builder().build())
+            .build()
+            .create(WikipediaApi::class.java)
     }
 }

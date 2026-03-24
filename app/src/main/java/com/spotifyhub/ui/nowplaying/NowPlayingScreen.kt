@@ -30,7 +30,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import sv.lib.squircleshape.SquircleShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -216,7 +215,6 @@ fun NowPlayingContent(
         /* Content — no sidebar, just the main area */
         MainContent(
             playback = playback,
-            isBusy = uiState.isRefreshing,
             isCurrentItemSaved = uiState.isCurrentItemSaved == true,
             transportEnabled = playback?.item != null,
             saveEnabled = playback?.item != null,
@@ -349,7 +347,6 @@ fun NowPlayingScreen(
 
             MainContent(
                 playback = playback,
-                isBusy = uiState.isRefreshing,
                 isCurrentItemSaved = uiState.isCurrentItemSaved == true,
                 transportEnabled = playback?.item != null,
                 saveEnabled = playback?.item != null,
@@ -413,7 +410,6 @@ private fun SidebarRail(
 @Composable
 private fun MainContent(
     playback: PlaybackSnapshot?,
-    isBusy: Boolean,
     isCurrentItemSaved: Boolean,
     transportEnabled: Boolean,
     saveEnabled: Boolean,
@@ -511,7 +507,6 @@ private fun MainContent(
             ArtworkHero(
                 artworkUrl = playback?.item?.artworkUrl,
                 title = playback?.item?.title,
-                isBusy = isBusy,
                 modifier = Modifier
                     .weight(0.42f)
                     .aspectRatio(1f),
@@ -544,7 +539,6 @@ private fun MainContent(
 private fun ArtworkHero(
     artworkUrl: String?,
     title: String?,
-    isBusy: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -573,8 +567,6 @@ private fun ArtworkHero(
                     contentScale = ContentScale.Crop,
                 )
             }
-        } else if (isBusy) {
-            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp)
         } else {
             ArtworkPlaceholder()
         }
@@ -1034,6 +1026,7 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
                         artworkUrl = null,
                         releaseDate = "2016-11-25",
                         uri = "spotify:track:preview-1",
+                        durationMs = 230_000L,
                         contentType = PlaybackContentType.Track,
                     ),
                     device = PlaybackDevice(
@@ -1066,6 +1059,7 @@ private class NowPlayingPreviewStateProvider : PreviewParameterProvider<NowPlayi
                         artworkUrl = null,
                         releaseDate = "2020-03-20",
                         uri = "spotify:track:preview-2",
+                        durationMs = 259_000L,
                         contentType = PlaybackContentType.Track,
                     ),
                     device = PlaybackDevice(

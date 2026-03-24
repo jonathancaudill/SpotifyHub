@@ -19,6 +19,7 @@ data class PlaybackItem(
     val artworkUrl: String?,
     val releaseDate: String?,
     val uri: String,
+    val durationMs: Long,
     val contentType: PlaybackContentType,
 )
 

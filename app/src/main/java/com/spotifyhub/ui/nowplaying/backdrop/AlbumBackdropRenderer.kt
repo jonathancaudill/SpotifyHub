@@ -96,6 +96,13 @@ class AlbumBackdropRenderer(
     @Volatile
     private var blurPassCount = KAWASE_OFFSETS.size
     private val startTimeMs = SystemClock.elapsedRealtime()
+
+    // The shader uses mediump float (often 16-bit half-float on ES 2.0), so
+    // large time values lose precision and cause visible rotation "snaps".
+    // Wrap at a period where every spin angle (0.045, ±0.12, ±0.09, 0.06)
+    // and orbital factor (×0.75) is an exact multiple of 2π, so the loop is
+    // seamless.  Period = 2π × 400/3 ≈ 837.76 s (~14 min).
+    private val timeWrapPeriod = (2.0 * Math.PI * 400.0 / 3.0).toFloat()
     private var pendingState: BackdropTransitionState? = null
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
@@ -247,7 +254,7 @@ class AlbumBackdropRenderer(
         bindQuad(scenePositionHandle, sceneTexCoordHandle)
 
         GLES20.glUniform2f(sceneResolutionHandle, width.toFloat(), height.toFloat())
-        GLES20.glUniform1f(sceneTimeHandle, (SystemClock.elapsedRealtime() - startTimeMs) / 1000f)
+        GLES20.glUniform1f(sceneTimeHandle, ((SystemClock.elapsedRealtime() - startTimeMs) / 1000f) % timeWrapPeriod)
         GLES20.glUniform1f(sceneTransitionHandle, transition)
         GLES20.glUniform4fv(sceneCurrentSeedHandle, 1, currentSeed.toUniformArray(), 0)
         GLES20.glUniform4fv(scenePreviousSeedHandle, 1, previousSeed.toUniformArray(), 0)

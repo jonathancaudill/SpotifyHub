@@ -12,6 +12,7 @@ import com.spotifyhub.spotify.api.SpotifyEmbedApi
 import com.spotifyhub.spotify.api.SpotifyLibraryApi
 import com.spotifyhub.spotify.api.SpotifySearchApi
 import com.spotifyhub.spotify.dto.browse.ArtistFullDto
+import com.spotifyhub.spotify.dto.browse.PlayHistoryDto
 import com.spotifyhub.spotify.dto.browse.SimplifiedPlaylistDto
 import com.spotifyhub.spotify.mapper.BrowseMapper
 import com.spotifyhub.spotify.mapper.SearchMapper
@@ -38,7 +39,7 @@ class BrowseRepository(
 
         return coroutineScope {
             val profileDeferred = async { runCatching { browseApi.getCurrentUserProfile() }.getOrNull() }
-            val recentDeferred = async { runCatching { browseApi.getRecentlyPlayed(limit = 50) }.getOrNull() }
+            val recentDeferred = async { runCatching { fetchRecentlyPlayed() }.getOrNull().orEmpty() }
             val topTracksShortDeferred = async { runCatching { browseApi.getTopTracks(timeRange = "short_term", limit = 20) }.getOrNull() }
             val topTracksMediumDeferred = async { runCatching { browseApi.getTopTracks(timeRange = "medium_term", limit = 20) }.getOrNull() }
             val topArtistsDeferred = async { runCatching { browseApi.getTopArtists(timeRange = "medium_term", limit = 20) }.getOrNull() }
@@ -48,7 +49,7 @@ class BrowseRepository(
             val pinnedPlaylistSectionsDeferred = async { fetchPinnedPlaylistSections() }
 
             val profile = profileDeferred.await()
-            val recent = recentDeferred.await()
+            val recentHistory = recentDeferred.await()
             val topTracksShort = topTracksShortDeferred.await()
             val topTracksMedium = topTracksMediumDeferred.await()
             val topArtists = topArtistsDeferred.await()
@@ -60,11 +61,27 @@ class BrowseRepository(
             val displayName = profile?.displayName
             cachedDisplayName = displayName
 
-            /* Build quick-access from recently played unique contexts */
-            val recentItems = recent?.items.orEmpty().mapNotNull { BrowseMapper.mapPlayHistoryToBrowseItem(it) }
-            val quickAccess = recentItems
-                .distinctBy { it.contextUri ?: it.id }
-                .take(6)
+            /* Build recently-played items (tracks) for the "Recently Played" section */
+            val recentItems = recentHistory.mapNotNull { BrowseMapper.mapPlayHistoryToBrowseItem(it) }
+
+            /* ── Your Top Albums Right Now ─────────────────────────────
+             * Extract albums from recently played tracks, rank by play
+             * frequency, and use them for both the quick-access grid and
+             * a dedicated section.
+             */
+            val recentAlbums = recentHistory
+                .mapNotNull { it.track?.let(BrowseMapper::mapAlbumFromTrack) }
+            // Count how many tracks were played per album to rank "faves"
+            val albumPlayCounts = recentAlbums
+                .groupingBy { it.id }
+                .eachCount()
+            // Deduplicate, keeping first occurrence (most recent), sort by play count desc
+            val recentFaveAlbums = recentAlbums
+                .distinctBy { it.id }
+                .sortedByDescending { albumPlayCounts[it.id] ?: 0 }
+
+            /* Quick-access grid: show top albums right now instead of individual tracks */
+            val quickAccess = recentFaveAlbums.take(6)
 
             /* ── Categorize personalized playlists ──────────────────── */
             val categorized = allPlaylists
@@ -125,13 +142,18 @@ class BrowseRepository(
                     "Your Daily Mixes",
                 )
 
-            /* 3. Recently Played */
+            /* 3. Your Top Albums Right Now */
+            recentFaveAlbums
+                .takeIf { it.isNotEmpty() }
+                ?.let { sections += HomeSection("Your Top Albums Right Now", it, SectionStyle.HorizontalCards) }
+
+            /* 4. Recently Played */
             val recentUnique = recentItems.distinctBy { it.id }.take(20)
             if (recentUnique.isNotEmpty()) {
                 sections += HomeSection("Recently Played", recentUnique, SectionStyle.HorizontalCards)
             }
 
-            /* 4. Your Top Tracks Right Now */
+            /* 5. Your Top Tracks Right Now */
             topTrackItems
                 .takeIf { it.isNotEmpty() }
                 ?.let { sections += HomeSection("Your Top Tracks Right Now", it, SectionStyle.HorizontalCards) }
@@ -213,6 +235,28 @@ class BrowseRepository(
             // Cap at 200 to avoid excessive API calls for users with huge libraries
         } while (page.next != null && allPlaylists.size < MAX_PLAYLISTS_TO_FETCH)
         return allPlaylists
+    }
+
+    /* ── Recently-played cursor pagination ────────────────────────── */
+
+    /**
+     * Fetches up to [MAX_RECENT_HISTORY] recently-played items using cursor
+     * pagination. The Spotify API caps each request at 50, but provides a
+     * `before` cursor so we can walk backwards through the history.
+     */
+    private suspend fun fetchRecentlyPlayed(): List<PlayHistoryDto> {
+        val all = mutableListOf<PlayHistoryDto>()
+        var beforeCursor: Long? = null
+        do {
+            val page = browseApi.getRecentlyPlayed(limit = 50, before = beforeCursor)
+            val items = page.items.orEmpty()
+            if (items.isEmpty()) break
+            all.addAll(items)
+            if (all.size >= MAX_RECENT_HISTORY) return all.take(MAX_RECENT_HISTORY)
+            // The `before` cursor is a Unix-ms timestamp; parse it for the next page
+            beforeCursor = page.cursors?.before?.toLongOrNull() ?: break
+        } while (page.next != null)
+        return all
     }
 
     /* ── Search-driven discovery sections ─────────────────────────── */
@@ -364,6 +408,8 @@ class BrowseRepository(
     companion object {
         private const val CACHE_TTL_MS = 5 * 60 * 1000L // 5 minutes
         private const val MAX_PLAYLISTS_TO_FETCH = 200
+        /** Max recently-played items to fetch via cursor pagination (4 pages × 50). */
+        private const val MAX_RECENT_HISTORY = 200
         private const val TAG = "BrowseRepository"
         private val openSpotifyPlaylistRegex =
             Regex("(?i)(?:https?://)?open\\.spotify\\.com/playlist/([A-Za-z0-9]{22})")

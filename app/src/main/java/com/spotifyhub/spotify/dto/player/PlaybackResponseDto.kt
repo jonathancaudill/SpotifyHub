@@ -41,8 +41,11 @@ data class TrackDto(
 
 @JsonClass(generateAdapter = true)
 data class AlbumDto(
+    val id: String? = null,
     val name: String?,
     val images: List<ImageDto>? = null,
+    val uri: String? = null,
+    val artists: List<ArtistDto>? = null,
     @param:Json(name = "release_date") val releaseDate: String? = null,
 )
 
@@ -81,4 +84,10 @@ data class DeviceDto(
     val name: String?,
     val type: String?,
     @param:Json(name = "volume_percent") val volumePercent: Int?,
+)
+
+@JsonClass(generateAdapter = true)
+data class QueueResponseDto(
+    @param:Json(name = "currently_playing") val currentlyPlaying: PlaybackItemDto?,
+    val queue: List<PlaybackItemDto>?,
 )

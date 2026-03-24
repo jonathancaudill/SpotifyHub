@@ -5,6 +5,7 @@ import com.spotifyhub.browse.model.BrowseItemType
 import com.spotifyhub.spotify.dto.browse.ArtistFullDto
 import com.spotifyhub.spotify.dto.browse.PlayHistoryDto
 import com.spotifyhub.spotify.dto.browse.SimplifiedPlaylistDto
+import com.spotifyhub.spotify.dto.player.AlbumDto
 import com.spotifyhub.spotify.dto.player.TrackDto
 
 object BrowseMapper {
@@ -25,6 +26,26 @@ object BrowseMapper {
     fun mapPlayHistoryToBrowseItem(dto: PlayHistoryDto): BrowseItem? {
         val track = dto.track ?: return null
         return mapTrackToBrowseItem(track, contextUri = dto.context?.uri)
+    }
+
+    /**
+     * Extract an album-level [BrowseItem] from a track's embedded album data.
+     * Uses the track's artists as a fallback when the album DTO doesn't carry its own.
+     */
+    fun mapAlbumFromTrack(track: TrackDto): BrowseItem? {
+        val album = track.album ?: return null
+        val albumId = album.id ?: return null
+        val albumUri = album.uri ?: return null
+        val artists = album.artists?.takeIf { it.isNotEmpty() } ?: track.artists
+        return BrowseItem(
+            id = albumId,
+            title = album.name.orEmpty(),
+            subtitle = artists.orEmpty().joinToString(", ") { it.name.orEmpty() },
+            artworkUrl = album.images.orEmpty().firstOrNull()?.url,
+            uri = albumUri,
+            type = BrowseItemType.Album,
+            contextUri = albumUri,
+        )
     }
 
     fun mapArtistToBrowseItem(dto: ArtistFullDto): BrowseItem? {

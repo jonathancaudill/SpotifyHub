@@ -26,30 +26,7 @@ object PlaybackMapper {
             progressMs = dto.progressMs ?: 0L,
             durationMs = dto.item?.durationMs ?: 0L,
             fetchedAtEpochMs = Instant.now().toEpochMilli(),
-            item = dto.item?.let {
-                val contentType = it.toContentType(dto.currentlyPlayingType)
-                PlaybackItem(
-                    id = it.id.orEmpty(),
-                    title = it.name.orEmpty(),
-                    artist = when (contentType) {
-                        PlaybackContentType.Audiobook -> it.audiobook?.authors.orEmpty().firstOrNull()?.name.orEmpty()
-                        PlaybackContentType.Podcast -> it.show?.publisher.orEmpty()
-                        else -> it.artists.orEmpty().firstOrNull()?.name.orEmpty()
-                    },
-                    album = when (contentType) {
-                        PlaybackContentType.Audiobook -> it.audiobook?.name.orEmpty()
-                        PlaybackContentType.Podcast -> it.show?.name.orEmpty()
-                        else -> it.album?.name.orEmpty()
-                    },
-                    artworkUrl = it.album?.images?.firstOrNull()?.url
-                        ?: it.images?.firstOrNull()?.url
-                        ?: it.audiobook?.images?.firstOrNull()?.url
-                        ?: it.show?.images?.firstOrNull()?.url,
-                    releaseDate = it.album?.releaseDate ?: it.releaseDate,
-                    uri = it.uri.orEmpty(),
-                    contentType = contentType,
-                )
-            },
+            item = dto.item?.let { mapItem(it, dto.currentlyPlayingType) },
             device = dto.device?.let {
                 PlaybackDevice(
                     id = it.id.orEmpty(),
@@ -58,6 +35,36 @@ object PlaybackMapper {
                     volumePercent = it.volumePercent,
                 )
             },
+        )
+    }
+
+    /** Map a single [PlaybackItemDto] to a domain [PlaybackItem]. Reused for queue items. */
+    fun mapItem(
+        dto: PlaybackItemDto,
+        currentlyPlayingType: String? = null,
+    ): PlaybackItem {
+        val contentType = dto.toContentType(currentlyPlayingType)
+        return PlaybackItem(
+            id = dto.id.orEmpty(),
+            title = dto.name.orEmpty(),
+            artist = when (contentType) {
+                PlaybackContentType.Audiobook -> dto.audiobook?.authors.orEmpty().firstOrNull()?.name.orEmpty()
+                PlaybackContentType.Podcast -> dto.show?.publisher.orEmpty()
+                else -> dto.artists.orEmpty().firstOrNull()?.name.orEmpty()
+            },
+            album = when (contentType) {
+                PlaybackContentType.Audiobook -> dto.audiobook?.name.orEmpty()
+                PlaybackContentType.Podcast -> dto.show?.name.orEmpty()
+                else -> dto.album?.name.orEmpty()
+            },
+            artworkUrl = dto.album?.images?.firstOrNull()?.url
+                ?: dto.images?.firstOrNull()?.url
+                ?: dto.audiobook?.images?.firstOrNull()?.url
+                ?: dto.show?.images?.firstOrNull()?.url,
+            releaseDate = dto.album?.releaseDate ?: dto.releaseDate,
+            uri = dto.uri.orEmpty(),
+            durationMs = dto.durationMs ?: 0L,
+            contentType = contentType,
         )
     }
 

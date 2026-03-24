@@ -57,7 +57,10 @@ class MainViewModelFactory(
             }
 
             modelClass.isAssignableFrom(DetailViewModel::class.java) -> {
-                DetailViewModel(appGraph.libraryRepository) as T
+                DetailViewModel(
+                    libraryRepository = appGraph.libraryRepository,
+                    artistRepository = appGraph.artistRepository,
+                ) as T
             }
 
             else -> error("Unknown ViewModel: ${modelClass.name}")

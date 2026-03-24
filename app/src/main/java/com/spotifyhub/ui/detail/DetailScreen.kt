@@ -16,8 +16,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import sv.lib.squircleshape.SquircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,13 +41,19 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.spotifyhub.artist.model.ArtistBio
+import com.spotifyhub.artist.model.ArtistDetail
+import com.spotifyhub.artist.model.ArtistPlaylistSummary
+import com.spotifyhub.artist.model.ArtistReleaseSummary
 import com.spotifyhub.library.model.TrackItem
 import com.spotifyhub.ui.common.NowPlayingIndicator
 import com.spotifyhub.ui.common.bounceOverscroll
 import com.spotifyhub.ui.icons.AppIcons
+import sv.lib.squircleshape.SquircleShape
 
 private val BrowseBackground = Color(0xFF171A1F)
 private val SpotifyGreen = Color(0xFF1ED760)
+private val CardShape = SquircleShape(14.dp)
 
 @Composable
 fun DetailScreen(
@@ -80,58 +87,71 @@ fun DetailScreen(
                 )
             }
 
-            else -> {
+            uiState.content != null -> {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .bounceOverscroll(orientation = Orientation.Vertical),
                 ) {
-                    /* Back button */
                     item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .clip(SquircleShape(16.dp))
-                                    .clickable(onClick = onBack)
-                                    .padding(4.dp),
+                        DetailBackButton(onBack = onBack)
+                    }
+
+                    when (val content = uiState.content) {
+                        is DetailContent.Album -> {
+                            item {
+                                CollectionHeader(
+                                    title = content.title,
+                                    subtitle = content.subtitle,
+                                    description = null,
+                                    artworkUrl = content.artworkUrl,
+                                    onPlay = { viewModel.playFromStart() },
+                                )
+                            }
+                            itemsIndexed(content.tracks, key = { _, track -> track.id }) { index, track ->
+                                TrackRow(
+                                    track = track,
+                                    index = index + 1,
+                                    isNowPlaying = isPlaybackActive && currentTrackId == track.id,
+                                    onClick = { viewModel.playContext(trackOffset = index) },
+                                )
+                            }
+                        }
+
+                        is DetailContent.Playlist -> {
+                            item {
+                                CollectionHeader(
+                                    title = content.title,
+                                    subtitle = content.subtitle,
+                                    description = content.description,
+                                    artworkUrl = content.artworkUrl,
+                                    onPlay = { viewModel.playFromStart() },
+                                )
+                            }
+                            itemsIndexed(content.tracks, key = { _, track -> track.id }) { index, track ->
+                                TrackRow(
+                                    track = track,
+                                    index = index + 1,
+                                    isNowPlaying = isPlaybackActive && currentTrackId == track.id,
+                                    onClick = { viewModel.playContext(trackOffset = index) },
+                                )
+                            }
+                        }
+
+                        is DetailContent.Artist -> {
+                            item {
+                                ArtistHeader(detail = content.detail)
+                            }
+                            artistSections(
+                                detail = content.detail,
+                                onReleaseClick = viewModel::openArtistRelease,
+                                onPlaylistClick = viewModel::openArtistPlaylist,
                             )
                         }
+
+                        null -> Unit
                     }
 
-                    /* Header with artwork and gradient */
-                    item {
-                        DetailHeader(
-                            title = uiState.title,
-                            subtitle = uiState.subtitle,
-                            description = uiState.description,
-                            artworkUrl = uiState.artworkUrl,
-                            onPlay = { viewModel.playFromStart() },
-                        )
-                    }
-
-                    /* Track list */
-                    itemsIndexed(
-                        items = uiState.tracks,
-                        key = { _, track -> track.id },
-                    ) { index, track ->
-                        TrackRow(
-                            track = track,
-                            index = index + 1,
-                            isNowPlaying = isPlaybackActive && currentTrackId == track.id,
-                            onClick = { viewModel.playContext(trackOffset = index) },
-                        )
-                    }
-
-                    /* Bottom padding */
                     item {
                         Spacer(modifier = Modifier.height(24.dp))
                     }
@@ -141,8 +161,80 @@ fun DetailScreen(
     }
 }
 
+private fun androidx.compose.foundation.lazy.LazyListScope.artistSections(
+    detail: ArtistDetail,
+    onReleaseClick: (ArtistReleaseSummary) -> Unit,
+    onPlaylistClick: (ArtistPlaylistSummary) -> Unit,
+) {
+    if (detail.albums.isNotEmpty()) {
+        item {
+            DetailSectionHeader("Albums")
+        }
+        item {
+            ReleaseRow(items = detail.albums, onClick = onReleaseClick)
+        }
+    }
+
+    if (detail.singlesAndEps.isNotEmpty()) {
+        item {
+            DetailSectionHeader("Singles & EPs")
+        }
+        item {
+            ReleaseRow(items = detail.singlesAndEps, onClick = onReleaseClick)
+        }
+    }
+
+    if (detail.featuredOn.isNotEmpty()) {
+        item {
+            DetailSectionHeader("Featured On")
+        }
+        item {
+            ReleaseRow(items = detail.featuredOn, onClick = onReleaseClick)
+        }
+    }
+
+    if (detail.curatedPlaylists.isNotEmpty()) {
+        item {
+            DetailSectionHeader("Curated Playlists")
+        }
+        item {
+            PlaylistRow(items = detail.curatedPlaylists, onClick = onPlaylistClick)
+        }
+    }
+
+    detail.bio?.let { bio ->
+        item {
+            DetailSectionHeader("Bio")
+        }
+        item {
+            ArtistBioCard(bio = bio)
+        }
+    }
+}
+
 @Composable
-private fun DetailHeader(
+private fun DetailBackButton(onBack: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+            contentDescription = "Back",
+            tint = Color.White,
+            modifier = Modifier
+                .size(32.dp)
+                .clip(SquircleShape(16.dp))
+                .clickable(onClick = onBack)
+                .padding(4.dp),
+        )
+    }
+}
+
+@Composable
+private fun CollectionHeader(
     title: String,
     subtitle: String,
     description: String?,
@@ -169,7 +261,6 @@ private fun DetailHeader(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            /* Artwork */
             AsyncImage(
                 model = ImageRequest.Builder(context)
                     .data(artworkUrl)
@@ -184,7 +275,6 @@ private fun DetailHeader(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            /* Title + subtitle + play button */
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.Center,
@@ -212,7 +302,6 @@ private fun DetailHeader(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                /* Play button */
                 Row(
                     modifier = Modifier
                         .clip(SquircleShape(24.dp))
@@ -239,7 +328,6 @@ private fun DetailHeader(
             }
         }
 
-        /* Description */
         if (!description.isNullOrBlank()) {
             Text(
                 text = description,
@@ -252,6 +340,225 @@ private fun DetailHeader(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun ArtistHeader(detail: ArtistDetail) {
+    val context = LocalContext.current
+    val metadataLine = buildList {
+        if (detail.genres.isNotEmpty()) {
+            add(detail.genres.take(2).joinToString(", "))
+        }
+        detail.followersTotal?.let { add("${formatCount(it)} followers") }
+        detail.popularity?.let { add("Popularity $it") }
+    }.joinToString(" • ")
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0xFF253240),
+                        BrowseBackground,
+                    ),
+                ),
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(detail.artworkUrl)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = detail.name,
+                modifier = Modifier
+                    .size(156.dp)
+                    .clip(SquircleShape(18.dp)),
+                contentScale = ContentScale.Crop,
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Artist",
+                    color = SpotifyGreen,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                )
+                Text(
+                    text = detail.name,
+                    color = Color.White,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 30.sp,
+                    ),
+                )
+                if (metadataLine.isNotBlank()) {
+                    Text(
+                        text = metadataLine,
+                        color = Color.White.copy(alpha = 0.72f),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+    }
+}
+
+@Composable
+private fun DetailSectionHeader(title: String) {
+    Text(
+        text = title,
+        color = Color.White,
+        style = MaterialTheme.typography.titleMedium.copy(
+            fontWeight = FontWeight.Bold,
+            fontSize = 20.sp,
+        ),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun ReleaseRow(
+    items: List<ArtistReleaseSummary>,
+    onClick: (ArtistReleaseSummary) -> Unit,
+) {
+    LazyRow(
+        modifier = Modifier.bounceOverscroll(orientation = Orientation.Horizontal),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(items, key = { it.id }) { item ->
+            MediaCard(
+                title = item.title,
+                subtitle = item.subtitle,
+                artworkUrl = item.artworkUrl,
+                meta = item.totalTracks?.let { "$it tracks" },
+                onClick = { onClick(item) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaylistRow(
+    items: List<ArtistPlaylistSummary>,
+    onClick: (ArtistPlaylistSummary) -> Unit,
+) {
+    LazyRow(
+        modifier = Modifier.bounceOverscroll(orientation = Orientation.Horizontal),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(items, key = { it.id }) { item ->
+            MediaCard(
+                title = item.title,
+                subtitle = item.subtitle,
+                artworkUrl = item.artworkUrl,
+                meta = "Playlist",
+                onClick = { onClick(item) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun MediaCard(
+    title: String,
+    subtitle: String,
+    artworkUrl: String?,
+    meta: String?,
+    onClick: () -> Unit,
+) {
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier
+            .width(152.dp)
+            .clip(CardShape)
+            .background(Color.White.copy(alpha = 0.05f))
+            .clickable(onClick = onClick)
+            .padding(10.dp),
+    ) {
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(artworkUrl)
+                .crossfade(true)
+                .build(),
+            contentDescription = title,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(132.dp)
+                .clip(SquircleShape(10.dp)),
+            contentScale = ContentScale.Crop,
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = title,
+            color = Color.White,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+            ),
+        )
+        if (subtitle.isNotBlank()) {
+            Text(
+                text = subtitle,
+                color = Color.White.copy(alpha = 0.6f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        if (!meta.isNullOrBlank()) {
+            Text(
+                text = meta,
+                color = SpotifyGreen.copy(alpha = 0.88f),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ArtistBioCard(bio: ArtistBio) {
+    Column(
+        modifier = Modifier
+            .padding(horizontal = 16.dp)
+            .clip(CardShape)
+            .background(Color.White.copy(alpha = 0.05f))
+            .padding(14.dp),
+    ) {
+        Text(
+            text = bio.summary,
+            color = Color.White.copy(alpha = 0.82f),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        bio.sourceUrl?.takeIf { it.isNotBlank() }?.let { url ->
+            Text(
+                text = url,
+                color = SpotifyGreen.copy(alpha = 0.9f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 10.dp),
+            )
+        }
     }
 }
 
@@ -290,7 +597,6 @@ private fun TrackRow(
 
         Spacer(modifier = Modifier.width(12.dp))
 
-        /* Title + artist */
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = track.title,
@@ -310,7 +616,6 @@ private fun TrackRow(
             )
         }
 
-        /* Duration */
         Text(
             text = formatTrackDuration(track.durationMs),
             color = if (isNowPlaying) SpotifyGreen else Color.White.copy(alpha = 0.5f),
@@ -324,4 +629,12 @@ private fun formatTrackDuration(durationMs: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%d:%02d".format(minutes, seconds)
+}
+
+private fun formatCount(value: Int): String {
+    return when {
+        value >= 1_000_000 -> String.format("%.1fM", value / 1_000_000f)
+        value >= 1_000 -> String.format("%.1fK", value / 1_000f)
+        else -> value.toString()
+    }
 }

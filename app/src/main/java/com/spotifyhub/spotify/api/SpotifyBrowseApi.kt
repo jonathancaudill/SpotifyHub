@@ -17,6 +17,7 @@ interface SpotifyBrowseApi {
     @GET("v1/me/player/recently-played")
     suspend fun getRecentlyPlayed(
         @Query("limit") limit: Int = 50,
+        @Query("before") before: Long? = null,
     ): RecentlyPlayedResponseDto
 
     @GET("v1/me/top/tracks")

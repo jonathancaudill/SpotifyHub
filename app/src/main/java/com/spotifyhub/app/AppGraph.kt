@@ -1,6 +1,7 @@
 package com.spotifyhub.app
 
 import android.content.Context
+import com.spotifyhub.artist.ArtistRepository
 import com.spotifyhub.auth.EncryptedPrefsTokenStore
 import com.spotifyhub.auth.SpotifyAuthRepository
 import com.spotifyhub.auth.TokenStore
@@ -10,12 +11,14 @@ import com.spotifyhub.playback.PlaybackRepository
 import com.spotifyhub.rating.SheetsRepository
 import com.spotifyhub.search.SearchRepository
 import com.spotifyhub.spotify.api.SpotifyAccountsApi
+import com.spotifyhub.spotify.api.SpotifyArtistApi
 import com.spotifyhub.spotify.api.SpotifyBrowseApi
 import com.spotifyhub.spotify.api.SpotifyEmbedApi
 import com.spotifyhub.spotify.api.SpotifyLibraryApi
 import com.spotifyhub.spotify.api.SpotifyNetworkModule
 import com.spotifyhub.spotify.api.SpotifyPlayerApi
 import com.spotifyhub.spotify.api.SpotifySearchApi
+import com.spotifyhub.spotify.api.WikipediaApi
 import com.spotifyhub.system.input.InputRouter
 import com.spotifyhub.system.network.ConnectivityMonitor
 import com.squareup.moshi.Moshi
@@ -82,8 +85,19 @@ class AppGraph(private val appContext: Context) {
         )
     }
 
+    val artistApi: SpotifyArtistApi by lazy {
+        SpotifyNetworkModule.createArtistApi(
+            moshi = moshi,
+            authRepository = authRepository,
+        )
+    }
+
     val embedApi: SpotifyEmbedApi by lazy {
         SpotifyNetworkModule.createEmbedApi(moshi)
+    }
+
+    val wikipediaApi: WikipediaApi by lazy {
+        SpotifyNetworkModule.createWikipediaApi(moshi)
     }
 
     val playbackRepository: PlaybackRepository by lazy {
@@ -106,6 +120,14 @@ class AppGraph(private val appContext: Context) {
 
     val searchRepository: SearchRepository by lazy {
         SearchRepository(searchApi = searchApi)
+    }
+
+    val artistRepository: ArtistRepository by lazy {
+        ArtistRepository(
+            artistApi = artistApi,
+            searchApi = searchApi,
+            wikipediaApi = wikipediaApi,
+        )
     }
 
     val sheetsRepository: SheetsRepository by lazy {

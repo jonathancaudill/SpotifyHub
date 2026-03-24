@@ -120,8 +120,15 @@ fun MainScreen(
                 )
                 mainViewModel.openDetail()
             }
+            com.spotifyhub.browse.model.BrowseItemType.Artist -> {
+                detailViewModel.loadArtist(
+                    artistId = item.id,
+                    fallbackItem = item,
+                )
+                mainViewModel.openDetail()
+            }
             else -> {
-                /* Track or Artist — play directly */
+                /* Track */
                 detailViewModel.playTrack(item.uri)
             }
         }

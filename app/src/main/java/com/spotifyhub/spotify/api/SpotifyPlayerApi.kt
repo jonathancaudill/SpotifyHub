@@ -1,6 +1,7 @@
 package com.spotifyhub.spotify.api
 
 import com.spotifyhub.spotify.dto.player.PlaybackResponseDto
+import com.spotifyhub.spotify.dto.player.QueueResponseDto
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -49,4 +50,7 @@ interface SpotifyPlayerApi {
     suspend fun playContext(
         @Body body: PlayContextBody,
     )
+
+    @GET("v1/me/player/queue")
+    suspend fun getQueue(): QueueResponseDto?
 }
