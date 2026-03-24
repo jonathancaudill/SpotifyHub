@@ -1,53 +1,56 @@
 # SpotifyHub
 
-A dedicated Android music controller for Spotify, designed to turn landscape displays (like the Echo Show) into a beautiful always-on playback dashboard. Built entirely with Jetpack Compose and Kotlin, it combines a persistent now-playing surface with Home, Search, and Library browsing backed by the Spotify Web API.
+A dedicated Android music controller for Spotify, designed to turn landscape displays like the Echo Show into a polished always-on playback dashboard. Built with Jetpack Compose and Kotlin, it combines a persistent now-playing surface with personalized discovery, library browsing, rich detail views, and a Google Sheets-backed album rating flow.
 
 ## Features
 
-- **Now Playing Dashboard** — Large album art, track metadata, and playback controls in a landscape-optimized layout
-- **Sidebar Navigation Shell** — Persistent glass rail with Home, Search, Library, Rate, and Now Playing tabs
-- **Browse + Library Views** — Home recommendations, search results, saved library lists, and playlist/album detail pages
-- **Album Rating Tab** — Rate the currently playing album (0.0–10.0) with a touch-draggable circular dial. Ratings are submitted to a Google Sheet via Apps Script, existing ratings are detected and locked, and album art can be written into the sheet as an `IMAGE(...)` formula
-- **Swipe-Over Detail Pages** — Library and browse details stay scoped to their owning tab instead of replacing the global screen
-- **Shader-Driven Backdrop** — Real-time OpenGL ES 2.0 album art distortion with multi-pass Kawase blur, smooth crossfades between tracks
-- **Full Playback Control** — Play/pause, skip, shuffle, repeat, volume, seek (draggable progress bar), and library save/unsave
-- **Draggable Seek Bar** — Tap or drag to scrub through tracks with live time preview; seeks via the Spotify Web API
-- **OAuth2 PKCE Authentication** — Secure login via loopback callback server, no client secret required. Tokens stored in `EncryptedSharedPreferences`
-- **Kiosk Mode** — Immersive fullscreen, auto-launch on boot, landscape-locked single-task activity
-- **Hardware Input** — Volume up/down keys routed directly to Spotify volume control
-- **Connectivity Monitoring** — Offline indicator with graceful degradation
-- **SF Pro Typography** — Custom font stack for a polished display aesthetic
+- **Landscape-native shell** — Persistent sidebar navigation with Home, Search, Library, Rate, and Now Playing tabs, tuned through adaptive `LandscapeUiProfile` breakpoints instead of one fixed tablet layout
+- **Now Playing dashboard** — Large art, metadata, transport controls, library save/unsave, volume, repeat, shuffle, and tap-or-drag seeking in a more compact control surface
+- **Optimistic playback controls** — Transport and seek actions update locally first, while queue polling caches adjacent tracks for faster skip transitions and fewer visible snap-backs
+- **Personalized home discovery** — Greeting, quick-access albums, recently played history, top tracks, top artists, deep cuts, saved albums/songs, playlist shelves, and genre-driven discovery built from Spotify data
+- **Pinned personalized shelves** — Optional Gradle-configured playlist IDs let you force specific Discover Weekly, Release Radar, or Daily Mix shelves into Home even when Spotify metadata is inconsistent
+- **Smarter search** — Query intent parsing handles field filters like `artist:`, `album:`, `track:`, `genre:`, `year:`, `isrc:`, and `upc:` with reranking and fallback passes
+- **Artist detail pages** — Artist sheets include albums, singles/EPs, featured-on releases, curated playlists, and a best-effort Wikipedia bio
+- **Swipe-over detail pages** — Album, playlist, and artist detail stays scoped to the current browse tab instead of replacing the whole app shell
+- **Album rating tab** — Rate the currently playing album from `0.0` to `10.0` with a circular drag dial; ratings sync to Google Sheets through Apps Script and can include album art as an `IMAGE(...)` formula
+- **Custom motion and shape language** — Squircle-based surfaces, tuned bounce overscroll, and a refined sidebar/detail presentation keep the UI feeling cohesive on fixed landscape hardware
+- **Shader-driven backdrop** — Real-time OpenGL ES 2.0 album art distortion with multi-pass blur, seeded motion, and smoother crossfades between tracks
+- **OAuth2 PKCE authentication** — Secure login via loopback callback server, no client secret required; tokens are stored in `EncryptedSharedPreferences`
+- **Kiosk mode support** — Immersive fullscreen, auto-launch on boot, landscape lock, and single-task activity behavior for dedicated-controller installs
+- **Hardware input + connectivity awareness** — Volume keys route to Spotify volume control and the shell surfaces offline state gracefully
 
 ## Architecture
 
-```
-Spotify Web API
+```text
+Spotify Web API + Spotify oEmbed + Wikipedia REST API
       │
-SpotifyPlayerApi / SpotifyLibraryApi / SpotifyBrowseApi / SpotifySearchApi
+SpotifyPlayerApi / SpotifyLibraryApi / SpotifyBrowseApi / SpotifySearchApi / SpotifyArtistApi
+SpotifyEmbedApi / WikipediaApi
       │
-PlaybackRepository / LibraryRepository / BrowseRepository / SearchRepository / SheetsRepository
+PlaybackRepository / LibraryRepository / BrowseRepository / SearchRepository / ArtistRepository / SheetsRepository
       │
 PlayerViewModel / LibraryViewModel / HomeViewModel / SearchViewModel / DetailViewModel / RatingViewModel
       │
 MainScreen                                  ← Sidebar shell + tab container
   ├── persistent AlbumBackdropHost          ← Always-mounted GLSurfaceView for warm shader transitions
-  ├── Home / Search / Library content pages
-  ├── RatingScreen                          ← Album rating with circular drag dial + Google Sheets sync
-  ├── tab-scoped swipe-over detail sheet
-  └── NowPlayingContent                     ← Track metadata, transport, seek, utility controls
+  ├── Home / Search / Library / Rating pages
+  ├── tab-scoped swipe-over DetailScreen    ← Album / playlist / artist detail
+  └── NowPlayingContent                     ← Optimistic transport, seek, utility controls
 ```
 
 **Key patterns:**
 - Manual dependency injection via `AppGraph` (no Hilt)
 - `StateFlow`-based reactive state
-- Repository layer owns API calls and polling
-- Client-side progress interpolation (180ms tick) for smooth bar animation between polls
+- Repository layer owns API calls, caching, optimistic state, and polling
+- Client-side progress interpolation for smooth seek/progress animation between playback polls
+- Parallel fetches for home shelves, playback state + queue, and artist detail sections where latency matters
 
 ## Project Structure
 
-```
+```text
 app/src/main/java/com/spotifyhub/
 ├── app/                  # Application shell, DI graph, ViewModelFactory
+├── artist/               # ArtistRepository and artist detail models
 ├── auth/                 # OAuth2 PKCE flow, loopback server, encrypted token store
 ├── browse/               # Home/browse repository and models
 ├── library/              # Library repository and models
@@ -55,7 +58,7 @@ app/src/main/java/com/spotifyhub/
 ├── rating/               # SheetsRepository (Google Sheets integration via Apps Script)
 ├── search/               # Search repository and models
 ├── spotify/
-│   ├── api/              # Retrofit interfaces (Player, Library, Browse, Search, Accounts)
+│   ├── api/              # Retrofit interfaces (Spotify APIs, oEmbed, Wikipedia, Accounts)
 │   ├── dto/              # Moshi data transfer objects
 │   └── mapper/           # DTO → domain model mapping
 ├── system/
@@ -65,8 +68,8 @@ app/src/main/java/com/spotifyhub/
 ├── theme/                # Material 3 theme, SF Pro typography
 └── ui/
     ├── auth/             # Auth screen
-    ├── common/           # Shared UI utilities (overscroll, indicators)
-    ├── detail/           # Playlist/album detail sheet
+    ├── common/           # Shared UI utilities (overscroll, indicators, landscape profiles)
+    ├── detail/           # Album / playlist / artist detail sheet
     ├── home/             # Home tab
     ├── library/          # Library tab
     ├── main/             # Main shell, sidebar, tab navigation
@@ -78,17 +81,12 @@ app/src/main/java/com/spotifyhub/
 
 app/src/main/assets/shaders/
 ├── album_backdrop.vert           # Vertex shader (pass-through quad)
-├── album_backdrop_scene.frag     # Scene shader (twisted art copies, compositing)
-└── album_backdrop_blur.frag      # Kawase blur (9-tap, multi-pass, saturation boost)
+├── album_backdrop_scene.frag     # Scene shader (distorted art copies, compositing)
+├── album_backdrop_twist.frag     # Twist deformation pass
+├── album_backdrop_sprite.frag    # Sprite compositing helpers
+├── album_backdrop_present.frag   # Final present/composite pass
+└── album_backdrop_blur.frag      # Multi-pass blur
 ```
-
-## Recent Changes Since The Last README Update
-
-- Replaced the rating tab's vertical scroll wheel with a thermostat-style circular drag dial and rebalanced the layout so album art, metadata, lock state, and submit action fit more cleanly in landscape
-- Fixed Google Apps Script submission reliability by manually following the script redirect flow and increasing network timeouts to tolerate Apps Script cold starts
-- Updated Google Sheets payloads so submitted album art can render directly in the sheet through an `IMAGE(...)` formula
-- Hardened Spotify search mapping against `null` items in API paging responses to avoid search result parsing failures
-- Expanded Spotify auth scopes to include `user-top-read` and `user-read-private`
 
 ## Getting Started
 
@@ -103,29 +101,36 @@ app/src/main/assets/shaders/
 
 1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
 2. Add this redirect URI to your app settings:
-   ```
+   ```text
    http://127.0.0.1:43821/callback
    ```
 3. Copy your **Client ID**
 
 ### Build Configuration
 
-Add your Spotify Client ID and (optionally) your Google Sheets script URL to `~/.gradle/gradle.properties`:
+Add your Spotify Client ID and optional integration properties to `~/.gradle/gradle.properties`:
 
 ```properties
 SPOTIFY_CLIENT_ID=your_client_id_here
 SHEETS_SCRIPT_URL=https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec
+SPOTIFY_HOME_DISCOVER_RELEASE_IDS=spotify:playlist:...,https://open.spotify.com/playlist/...
+SPOTIFY_HOME_DAILY_MIX_IDS=37i9dQZF...,37i9dQZF...
 ```
+
+- `SPOTIFY_CLIENT_ID` is required
+- `SHEETS_SCRIPT_URL` enables the rating tab submission flow
+- `SPOTIFY_HOME_DISCOVER_RELEASE_IDS` optionally pins specific playlist IDs or Spotify playlist URLs into the "Discover Weekly & Release Radar" shelf
+- `SPOTIFY_HOME_DAILY_MIX_IDS` optionally pins specific playlist IDs or URLs into the "Your Daily Mixes" shelf
 
 #### Google Sheets Rating Integration (optional)
 
 To enable the album rating tab:
 
-1. Open your Google Sheet → **Extensions → Apps Script**
+1. Open your Google Sheet -> **Extensions -> Apps Script**
 2. Paste the contents of `google-apps-script/Code.gs`
-3. **Deploy → New deployment → Web app** → Execute as "Me", Access "Anyone"
+3. **Deploy -> New deployment -> Web app** -> Execute as "Me", Access "Anyone"
 4. Copy the deployment URL and set it as `SHEETS_SCRIPT_URL` in your Gradle properties
-5. Expect the deployed Apps Script endpoint to issue a redirect before returning JSON; SpotifyHub now follows that flow explicitly and uses longer timeouts to handle cold starts
+5. Expect the deployed Apps Script endpoint to issue a redirect before returning JSON; SpotifyHub follows that redirect explicitly and uses longer timeouts to tolerate cold starts
 
 ### Fonts
 
@@ -158,17 +163,23 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| `GET` | `/v1/me/player` | Current playback state (polled every 1.5s) |
+| `GET` | `/v1/me/player` | Current playback state |
+| `GET` | `/v1/me/player/queue` | Queue snapshot for adjacent-track caching |
 | `GET` | `/v1/me/playlists` | User playlists for browse/library |
 | `GET` | `/v1/me/albums` | Saved albums |
 | `GET` | `/v1/me/tracks` | Saved tracks |
+| `GET` | `/v1/me` | Current user profile for greeting/display name |
+| `GET` | `/v1/me/top/tracks` | Personalized top tracks shelves |
+| `GET` | `/v1/me/top/artists` | Personalized top artists shelves and genre seeding |
 | `GET` | `/v1/playlists/{id}` | Playlist detail |
 | `GET` | `/v1/playlists/{id}/items` | Playlist tracks |
 | `GET` | `/v1/albums/{id}/tracks` | Album tracks |
-| `GET` | `/v1/search` | Search across tracks, albums, artists, playlists |
-| `GET` | `/v1/me/player/recently-played` | Home tab recents |
-| `GET` | `/v1/browse/featured-playlists` | Home tab featured playlists |
+| `GET` | `/v1/artists/{id}` | Artist detail |
+| `GET` | `/v1/artists/{id}/albums` | Artist releases by group |
+| `GET` | `/v1/search` | Search across tracks, albums, artists, and playlists |
+| `GET` | `/v1/me/player/recently-played` | Recently played history |
 | `PUT` | `/v1/me/player/play` | Resume playback |
+| `PUT` | `/v1/me/player/play` + body | Start album/playlist/track context playback |
 | `PUT` | `/v1/me/player/pause` | Pause playback |
 | `POST` | `/v1/me/player/next` | Skip to next track |
 | `POST` | `/v1/me/player/previous` | Skip to previous track |
@@ -180,9 +191,17 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 | `PUT` | `/v1/me/library` | Save track to library |
 | `DELETE` | `/v1/me/library` | Remove track from library |
 
+## External Integrations
+
+| Service | Endpoint | Purpose |
+|---------|----------|---------|
+| Spotify oEmbed | `/oembed` | Fallback metadata/artwork for pinned playlists when Web API fetches fail |
+| Wikipedia API | `/w/api.php?action=query&list=search...` | Artist page lookup |
+| Wikipedia REST | `/api/rest_v1/page/summary/{title}` | Artist bio summary cards |
+
 ### Required Scopes
 
-```
+```text
 user-read-playback-state
 user-read-currently-playing
 user-modify-playback-state
@@ -212,24 +231,27 @@ SpotifyHub uses **OAuth2 with PKCE** (no client secret needed):
 
 The album art backdrop uses a multi-stage OpenGL ES 2.0 pipeline:
 
-1. **Scene pass** — Generates 4 twisted/rotated copies of the album artwork with Apple-style deformation, each with seeded random parameters for deterministic yet varied motion
-2. **Blur passes** — 8 stacked Kawase blur passes with coprime offsets (`5, 11, 19, 13, 37, 23, 71, 43`) to avoid grid artifacts
-3. **Final composite** — Saturation boost + vignette fade on the last pass
+1. **Scene generation** — Produces multiple distorted artwork instances with seeded transforms so each album gets stable but non-static motion
+2. **Twist + sprite compositing** — Additional fragment stages shape and layer the artwork before blur
+3. **Blur stack** — Up to 8 blur passes build the soft backdrop while preserving enough color structure to feel alive
+4. **Present pass** — Final saturation and compositing treatment before the image hits the screen
 
-Artwork is downsampled to 512x512 and rendered to an offscreen framebuffer at 50% viewport resolution for performance. Smooth crossfades occur when tracks change, and the GLSurfaceView host remains mounted in the main shell so the shader stays warm when switching back to the Now Playing tab.
+Artwork is downsampled to `512x512` and rendered to an offscreen framebuffer at 50% viewport resolution for performance. Smooth crossfades occur when tracks change, and the `GLSurfaceView` host remains mounted in the main shell so the shader stays warm when switching back to the Now Playing tab.
 
 ## Tech Stack
 
 | Component | Library | Version |
 |-----------|---------|---------|
-| UI | Jetpack Compose (Material 3) | BOM 2026.03.00 |
-| Language | Kotlin | 2.3.10 |
-| HTTP | Retrofit + OkHttp | 3.0.0 / 5.3.2 |
-| JSON | Moshi | 1.15.2 |
-| Images | Coil Compose | 2.7.0 |
-| Async | Kotlin Coroutines | 1.10.2 |
-| Security | AndroidX Security Crypto | 1.1.0 |
-| Graphics | OpenGL ES 2.0 | (Android built-in) |
+| UI | Jetpack Compose (Material 3) | BOM `2026.03.00` |
+| Language | Kotlin | `2.3.10` |
+| HTTP | Retrofit + OkHttp | `3.0.0` / `5.3.2` |
+| JSON | Moshi | `1.15.2` |
+| Images | Coil Compose | `2.7.0` |
+| Async | Kotlin Coroutines | `1.10.2` |
+| Security | AndroidX Security Crypto | `1.1.0` |
+| Icons | Cupertino + extended icons | `0.1.0-alpha04` |
+| Shapes | squircle-shape-android | `5.2.0` |
+| Graphics | OpenGL ES 2.0 | Android built-in |
 | Min SDK | Android 11 | API 30 |
 
 ## License
