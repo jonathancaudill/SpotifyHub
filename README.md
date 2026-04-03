@@ -122,6 +122,41 @@ SPOTIFY_HOME_DAILY_MIX_IDS=37i9dQZF...,37i9dQZF...
 - `SPOTIFY_HOME_DISCOVER_RELEASE_IDS` optionally pins specific playlist IDs or Spotify playlist URLs into the "Discover Weekly & Release Radar" shelf
 - `SPOTIFY_HOME_DAILY_MIX_IDS` optionally pins specific playlist IDs or URLs into the "Your Daily Mixes" shelf
 
+### Release Signing
+
+Release builds can be signed from Gradle using values from any of these sources:
+
+- `keystore.properties` in the project root
+- `~/.gradle/gradle.properties`
+- environment variables
+
+The expected keys are:
+
+```properties
+RELEASE_STORE_FILE=keystore/spotifyhub-release.jks
+RELEASE_STORE_PASSWORD=your_store_password
+RELEASE_KEY_ALIAS=spotifyhub-release
+RELEASE_KEY_PASSWORD=your_key_password
+```
+
+- for the recommended PKCS12 keystore, `RELEASE_KEY_PASSWORD` should match `RELEASE_STORE_PASSWORD`
+- `keystore.properties.example` is included as a template
+- release tasks fail fast with a clear Gradle error if signing is not configured
+
+Generate a keystore once:
+
+```bash
+mkdir -p keystore
+keytool -genkeypair \
+  -v \
+  -storetype PKCS12 \
+  -keystore keystore/spotifyhub-release.jks \
+  -alias spotifyhub-release \
+  -keyalg RSA \
+  -keysize 4096 \
+  -validity 9125
+```
+
 #### Google Sheets Rating Integration (optional)
 
 To enable the album rating tab:
@@ -158,6 +193,22 @@ Install on a connected device:
 ```bash
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
+
+Build a signed release APK:
+
+```bash
+./gradlew assembleRelease
+```
+
+The signed APK is written to `app/build/outputs/apk/release/app-release.apk`.
+
+Build a signed release bundle:
+
+```bash
+./gradlew bundleRelease
+```
+
+The signed bundle is written to `app/build/outputs/bundle/release/app-release.aab`.
 
 ## Spotify API Endpoints Used
 

@@ -61,7 +61,12 @@ class PlaybackRepository(
     companion object {
         /** How long (ms) optimistic local state is protected from being overwritten by polling. */
         private const val OPTIMISTIC_GRACE_MS = 5_000L
+        private const val PLAY_PAUSE_OPTIMISTIC_GRACE_MS = 1_500L
         private const val POLL_INTERVAL_MS = 1_000L
+
+        private val DEFAULT_RECONCILE_DELAYS_MS = longArrayOf(0L, 500L, 1_500L)
+        private val TOGGLE_PLAYBACK_RECONCILE_DELAYS_MS = longArrayOf(0L, 350L, 1_000L, 2_500L)
+        private val TRANSPORT_RECONCILE_DELAYS_MS = longArrayOf(0L, 400L, 1_200L, 2_500L)
     }
 
     init {
@@ -159,10 +164,13 @@ class PlaybackRepository(
     // ── Optimistic update helpers ────────────────────────────────────────
 
     /** Apply an optimistic mutation to the current playback state and start the grace period. */
-    private fun applyOptimistic(mutate: PlaybackSnapshot.() -> PlaybackSnapshot) {
+    private fun applyOptimistic(
+        graceMs: Long = OPTIMISTIC_GRACE_MS,
+        mutate: PlaybackSnapshot.() -> PlaybackSnapshot,
+    ) {
         val current = _playbackState.value ?: return
         _playbackState.value = current.mutate()
-        optimisticUntil = System.currentTimeMillis() + OPTIMISTIC_GRACE_MS
+        optimisticUntil = System.currentTimeMillis() + graceMs
     }
 
     private fun shouldIgnorePlaybackUpdate(
@@ -190,33 +198,55 @@ class PlaybackRepository(
     }
 
     /** Fire the API command in the background, serialized by the mutex. */
-    private fun fireCommand(command: suspend () -> Unit) {
+    private fun fireCommand(
+        reconcileDelaysMs: LongArray = DEFAULT_RECONCILE_DELAYS_MS,
+        command: suspend () -> Unit,
+    ) {
         appScope.launch {
-            commandMutex.withLock {
+            val result = commandMutex.withLock {
                 runCatching { command() }
             }
+            result.onSuccess {
+                schedulePlaybackRefreshes(reconcileDelaysMs)
+            }.onFailure {
+                optimisticUntil = 0L
+                pendingTransportTransition = null
+                schedulePlaybackRefreshes(longArrayOf(0L, 750L))
+            }
         }
+    }
+
+    private fun schedulePlaybackRefreshes(delaysMs: LongArray) {
+        delaysMs.toSet()
+            .sorted()
+            .forEach { delayMs ->
+                appScope.launch {
+                    if (delayMs > 0L) {
+                        delay(delayMs)
+                    }
+                    fetchPlayback()
+                }
+            }
     }
 
     // ── Playback commands ────────────────────────────────────────────────
 
     fun togglePlayback() {
-        val wasPlaying = _playbackState.value?.isPlaying == true
-        applyOptimistic {
+        val playback = _playbackState.value ?: return
+        val wasPlaying = playback.isPlaying
+        applyOptimistic(graceMs = PLAY_PAUSE_OPTIMISTIC_GRACE_MS) {
             copy(
                 isPlaying = !wasPlaying,
                 fetchedAtEpochMs = System.currentTimeMillis(),
                 progressMs = if (isPlaying) {
-                    // Was playing → pausing: freeze progress at current interpolated position
-                    val elapsed = (System.currentTimeMillis() - fetchedAtEpochMs).coerceAtLeast(0L)
-                    (progressMs + elapsed).coerceIn(0L, durationMs)
+                    (progressMs + (System.currentTimeMillis() - fetchedAtEpochMs).coerceAtLeast(0L))
+                        .coerceIn(0L, durationMs)
                 } else {
-                    // Was paused → playing: keep progressMs as-is, fetchedAtEpochMs resets interpolation
                     progressMs
                 },
             )
         }
-        fireCommand {
+        fireCommand(reconcileDelaysMs = TOGGLE_PLAYBACK_RECONCILE_DELAYS_MS) {
             if (wasPlaying) playerApi.pause() else playerApi.play()
         }
     }
@@ -240,7 +270,7 @@ class PlaybackRepository(
             sourceItemId = currentItem?.id,
             targetItemId = next?.id,
         )
-        fireCommand { playerApi.skipNext() }
+        fireCommand(reconcileDelaysMs = TRANSPORT_RECONCILE_DELAYS_MS) { playerApi.skipNext() }
     }
 
     fun skipPrevious() {
@@ -261,7 +291,7 @@ class PlaybackRepository(
             sourceItemId = currentItem?.id,
             targetItemId = prev?.id,
         )
-        fireCommand { playerApi.skipPrevious() }
+        fireCommand(reconcileDelaysMs = TRANSPORT_RECONCILE_DELAYS_MS) { playerApi.skipPrevious() }
     }
 
     fun toggleSaveCurrentItem() {

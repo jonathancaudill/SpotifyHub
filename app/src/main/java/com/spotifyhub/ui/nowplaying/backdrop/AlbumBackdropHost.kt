@@ -3,7 +3,6 @@ package com.spotifyhub.ui.nowplaying.backdrop
 import android.graphics.PixelFormat
 import android.opengl.GLSurfaceView
 import android.os.Build
-import android.view.Surface
 import android.view.SurfaceView
 import android.view.View
 import android.view.Choreographer
@@ -29,7 +28,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlin.math.roundToInt
 
-private const val BACKDROP_TARGET_FPS = 15f
+private const val BACKDROP_TARGET_FPS = 20f
 private const val SURFACE_BUFFER_SCALE = 1.0f
 private const val FIXED_BLUR_PASS_COUNT = 7
 
@@ -86,9 +85,6 @@ fun AlbumBackdropHost(
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                     setSurfaceLifecycle(SurfaceView.SURFACE_LIFECYCLE_FOLLOWS_VISIBILITY)
                 }
-                if (Build.VERSION.SDK_INT >= 35) {
-                    setRequestedFrameRate(BACKDROP_TARGET_FPS)
-                }
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
                 addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
@@ -141,23 +137,20 @@ fun AlbumBackdropHost(
             onDispose { }
         } else {
             val choreographer = Choreographer.getInstance()
-            val refreshRate = surfaceView.display?.refreshRate?.takeIf { it > 0f } ?: 60f
-            val vsyncDivisor = (refreshRate / BACKDROP_TARGET_FPS)
-                .roundToInt()
-                .coerceAtLeast(1)
-            var vsyncCount = 0
+            val minFrameIntervalNanos = (1_000_000_000L / BACKDROP_TARGET_FPS).toLong()
+            var lastRenderFrameTimeNanos = 0L
 
             val callback = object : Choreographer.FrameCallback {
                 override fun doFrame(frameTimeNanos: Long) {
                     if (
-                        vsyncCount == 0 &&
                         surfaceView.hasWindowFocus() &&
                         surfaceView.windowVisibility == View.VISIBLE &&
-                        surfaceView.isShown
+                        surfaceView.isShown &&
+                        (lastRenderFrameTimeNanos == 0L || frameTimeNanos - lastRenderFrameTimeNanos >= minFrameIntervalNanos)
                     ) {
+                        lastRenderFrameTimeNanos = frameTimeNanos
                         surfaceView.requestRender()
                     }
-                    vsyncCount = (vsyncCount + 1) % vsyncDivisor
                     choreographer.postFrameCallback(this)
                 }
             }
@@ -220,15 +213,6 @@ private fun updateSurfacePresentation(
         surfaceView.visibility = visibility
     }
     updateSurfaceBufferSize(surfaceView = surfaceView, isVisible = isVisible)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        val surface = surfaceView.holder.surface
-        if (surface.isValid) {
-            surface.setFrameRate(
-                BACKDROP_TARGET_FPS,
-                Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
-            )
-        }
-    }
 }
 
 private fun updateSurfaceBufferSize(

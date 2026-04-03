@@ -52,6 +52,7 @@ import com.spotifyhub.ui.common.rememberLandscapeUiProfile
 private val BrowseBackground = Color(0xFF171A1F)
 private val SpotifyGreen = Color(0xFF1ED760)
 private val CardShape = SquircleShape(8.dp)
+private val QuickAccessCardShape = SquircleShape(8.dp)
 
 @Composable
 fun HomeScreen(
@@ -177,7 +178,7 @@ private fun QuickAccessCard(
     Row(
         modifier = modifier
             .height(profile.quickAccessCardHeight)
-            .clip(SquircleShape(6.dp))
+            .clip(QuickAccessCardShape)
             .background(Color.White.copy(alpha = 0.08f))
             .clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
@@ -189,8 +190,8 @@ private fun QuickAccessCard(
                 .build(),
             contentDescription = item.title,
             modifier = Modifier
-                .size(52.dp)
-                .clip(SquircleShape(topStart = 6.dp, bottomStart = 6.dp)),
+                .fillMaxHeight()
+                .aspectRatio(1f),
             contentScale = ContentScale.Crop,
         )
         Text(
@@ -202,7 +203,7 @@ private fun QuickAccessCard(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = profile.quickAccessTitleSize,
             ),
-            modifier = Modifier.padding(horizontal = 8.dp),
+            modifier = Modifier.padding(horizontal = 10.dp),
         )
     }
 }

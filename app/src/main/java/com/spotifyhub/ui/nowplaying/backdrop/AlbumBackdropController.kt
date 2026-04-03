@@ -9,14 +9,15 @@ import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.util.LruCache
 import androidx.core.graphics.drawable.toBitmap
-import coil.ImageLoader
-import coil.request.CachePolicy
+import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import kotlin.math.max
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -27,12 +28,11 @@ class AlbumBackdropController(
     private companion object {
         const val BITMAP_SIZE = 512
         const val BITMAP_CACHE_BYTES = 4 * BITMAP_SIZE * BITMAP_SIZE * 4
+        const val MAX_LOAD_ATTEMPTS = 3
+        const val LOAD_RETRY_DELAY_MS = 350L
     }
 
-    private val imageLoader = ImageLoader.Builder(appContext)
-        .allowHardware(false)
-        .memoryCachePolicy(CachePolicy.DISABLED)
-        .build()
+    private val imageLoader = appContext.imageLoader
     private val bitmapCache = object : LruCache<String, Bitmap>(BITMAP_CACHE_BYTES) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
@@ -90,10 +90,27 @@ class AlbumBackdropController(
         }
 
         loadJob = scope.launch {
-            val bitmap = loadBitmap(artworkUrl) ?: idleBitmap
+            var bitmap: Bitmap? = null
+            for (attempt in 0 until MAX_LOAD_ATTEMPTS) {
+                bitmap = loadBitmap(artworkUrl)
+                if (bitmap != null || !isActive || attempt == MAX_LOAD_ATTEMPTS - 1) {
+                    break
+                }
+                delay(LOAD_RETRY_DELAY_MS)
+            }
+
+            val resolvedBitmap = bitmap
+            if (resolvedBitmap == null) {
+                if (currentArtworkUrl == artworkUrl && currentArtworkKey == artworkKey && previousSlot.key == idleSlot.key) {
+                    currentSlot = idleSlot.copy(seed = BackdropSeedFactory.from(seedKey))
+                    pushState(previous = null, animate = false)
+                }
+                return@launch
+            }
+
             val nextSlot = BackdropTextureSlot(
-                bitmap = bitmap,
-                aspectRatio = max(bitmap.width, 1).toFloat() / max(bitmap.height, 1).toFloat(),
+                bitmap = resolvedBitmap,
+                aspectRatio = max(resolvedBitmap.width, 1).toFloat() / max(resolvedBitmap.height, 1).toFloat(),
                 seed = BackdropSeedFactory.from(seedKey),
                 key = artworkUrl,
             )

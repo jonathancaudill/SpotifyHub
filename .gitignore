@@ -5,9 +5,13 @@
 build/
 gradle/gradle-daemon-jvm.properties
 local.properties
+keystore.properties
 *.iml
 captures/
 app/build/
+*.jks
+*.keystore
+*.p12
 
 # SF Pro fonts — Apple proprietary, do not distribute
 app/src/main/res/font/sf_pro_*.otf

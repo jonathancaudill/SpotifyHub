@@ -7,7 +7,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -45,9 +44,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -84,7 +88,7 @@ import kotlinx.coroutines.delay
 /* ── Shape & colour tokens ─────────────────────────────────────────── */
 
 private val SidebarShape = SquircleShape(24.dp)
-private val ArtworkShape = SquircleShape(18.dp)
+private val ArtworkShape = SquircleShape(22.dp)
 
 private val SidebarSurface = Color(0x2415181D)
 private val SidebarBorder = Color.White.copy(alpha = 0.08f)
@@ -92,6 +96,7 @@ private val SurfaceShadow = Color.Black.copy(alpha = 0.20f)
 private val SpotifyGreen = Color(0xFF1ED760)
 
 private val PressCircleColor = Color.White.copy(alpha = 0.14f)
+private val MetadataFadeWidth = 56.dp
 
 /* ── Public entry-point (standalone, legacy) ──────────────────────── */
 
@@ -617,6 +622,7 @@ private fun MetadataBlock(
             text = item?.title ?: "Not Playing",
             color = Color.White,
             maxLines = 1,
+            softWrap = false,
             overflow = TextOverflow.Clip,
             style = MaterialTheme.typography.headlineLarge.copy(
                 fontSize = profile.nowPlayingTitleSize,
@@ -625,7 +631,7 @@ private fun MetadataBlock(
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .basicMarquee(),
+                .fadeOverflowEdge(),
         )
 
         Spacer(modifier = Modifier.height(6.dp))
@@ -634,6 +640,7 @@ private fun MetadataBlock(
             text = item?.artist ?: "Connect to start listening",
             color = Color.White.copy(alpha = 0.85f),
             maxLines = 1,
+            softWrap = false,
             overflow = TextOverflow.Clip,
             style = MaterialTheme.typography.titleLarge.copy(
                 fontSize = profile.nowPlayingArtistSize,
@@ -641,7 +648,7 @@ private fun MetadataBlock(
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .basicMarquee(),
+                .fadeOverflowEdge(),
         )
 
         item?.album?.takeIf { it.isNotBlank() }?.let { album ->
@@ -650,6 +657,7 @@ private fun MetadataBlock(
                 text = album,
                 color = Color.White.copy(alpha = 0.50f),
                 maxLines = 1,
+                softWrap = false,
                 overflow = TextOverflow.Clip,
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontSize = profile.nowPlayingAlbumSize,
@@ -657,11 +665,34 @@ private fun MetadataBlock(
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .basicMarquee(),
+                    .fadeOverflowEdge(),
             )
         }
     }
 }
+
+private fun Modifier.fadeOverflowEdge(
+    fadeWidth: Dp = MetadataFadeWidth,
+): Modifier = graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+    .drawWithContent {
+        drawContent()
+
+        val fadeWidthPx = fadeWidth.toPx().coerceAtMost(size.width / 2f)
+        if (fadeWidthPx <= 0f || size.width <= fadeWidthPx) {
+            return@drawWithContent
+        }
+
+        drawRect(
+            brush = Brush.horizontalGradient(
+                colors = listOf(Color.Black, Color.Transparent),
+                startX = size.width - fadeWidthPx,
+                endX = size.width,
+            ),
+            topLeft = Offset(size.width - fadeWidthPx, 0f),
+            size = size.copy(width = fadeWidthPx),
+            blendMode = BlendMode.DstIn,
+        )
+    }
 
 /* ── Artwork ───────────────────────────────────────────────────────── */
 

@@ -1,6 +1,63 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.ksp)
+}
+
+val releaseSigningProperties = Properties().apply {
+    val propertiesFile = rootProject.file("keystore.properties")
+    if (propertiesFile.isFile) {
+        propertiesFile.inputStream().use(::load)
+    }
+}
+
+fun releaseSigningValue(name: String): String? {
+    val configuredValue = releaseSigningProperties.getProperty(name)
+        ?: providers.gradleProperty(name).orNull
+        ?: providers.environmentVariable(name).orNull
+    return configuredValue?.trim()?.takeIf { it.isNotEmpty() }
+}
+
+fun resolveReleaseStoreFile(path: String): File =
+    if (File(path).isAbsolute) File(path) else rootProject.file(path)
+
+val releaseStorePath = releaseSigningValue("RELEASE_STORE_FILE")
+val releaseStoreFile = releaseStorePath?.let(::resolveReleaseStoreFile)
+val releaseStorePassword = releaseSigningValue("RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = releaseSigningValue("RELEASE_KEY_ALIAS")
+val releaseKeyPassword = releaseSigningValue("RELEASE_KEY_PASSWORD") ?: releaseStorePassword
+
+val releaseSigningProblems = buildList {
+    if (releaseStorePath == null) add("missing RELEASE_STORE_FILE")
+    if (releaseStorePassword == null) add("missing RELEASE_STORE_PASSWORD")
+    if (releaseKeyAlias == null) add("missing RELEASE_KEY_ALIAS")
+    if (releaseKeyPassword == null) add("missing RELEASE_KEY_PASSWORD")
+    if (releaseStoreFile != null && !releaseStoreFile.isFile) {
+        add("RELEASE_STORE_FILE does not exist: ${releaseStoreFile.path}")
+    }
+}
+
+val hasReleaseSigning = releaseSigningProblems.isEmpty()
+val releaseTasksRequested = gradle.startParameter.taskNames.any { taskName ->
+    val normalizedTaskName = taskName.substringAfterLast(':')
+    normalizedTaskName.equals("assemble", ignoreCase = true) ||
+        normalizedTaskName.equals("bundle", ignoreCase = true) ||
+        normalizedTaskName.equals("build", ignoreCase = true) ||
+        normalizedTaskName.contains("release", ignoreCase = true)
+}
+
+if (releaseTasksRequested && !hasReleaseSigning) {
+    throw GradleException(
+        buildString {
+            append("Release signing is not configured: ")
+            append(releaseSigningProblems.joinToString())
+            append(". Set RELEASE_STORE_FILE, RELEASE_STORE_PASSWORD, RELEASE_KEY_ALIAS, and RELEASE_KEY_PASSWORD ")
+            append("in keystore.properties, ~/.gradle/gradle.properties, or environment variables.")
+        },
+    )
 }
 
 android {
@@ -27,10 +84,24 @@ android {
         buildConfigField("String", "SPOTIFY_HOME_DAILY_MIX_IDS", "\"$spotifyHomeDailyMixIds\"")
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = releaseStoreFile
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -84,6 +155,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.moshi)
     implementation(libs.moshi.kotlin)
+    ksp(libs.moshi.kotlin.codegen)
     implementation(libs.coil.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.cupertino)

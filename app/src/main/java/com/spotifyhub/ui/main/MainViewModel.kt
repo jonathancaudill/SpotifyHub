@@ -21,7 +21,7 @@ enum class MainTab {
 class MainViewModel(
     private val tabSelectedEvent: MutableSharedFlow<MainTab>,
 ) : ViewModel() {
-    private val _selectedTab = MutableStateFlow(MainTab.NowPlaying)
+    private val _selectedTab = MutableStateFlow(MainTab.Home)
     val selectedTab: StateFlow<MainTab> = _selectedTab.asStateFlow()
 
     private val _detailTab = MutableStateFlow<MainTab?>(null)

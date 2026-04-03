@@ -41,8 +41,8 @@ class AlbumBackdropRenderer(
         val SPRITE_SIZE_FACTORS = floatArrayOf(1.25f, 0.80f, 0.50f, 0.25f)
         val SPRITE_ROTATION_SPEEDS = floatArrayOf(0.05f, -0.12f, -0.09f, 0.06f)
 
-        // Full-resolution rendering can support a much broader blur ladder
-        // before the field collapses into blocks, so push the offsets back up.
+        // Keep the backdrop field full-resolution so the art retains structure
+        // under the downstream blur and saturation passes.
         val KAWASE_OFFSETS = floatArrayOf(6f, 10f, 16f, 24f, 34f, 46f, 60f, 78f)
     }
 

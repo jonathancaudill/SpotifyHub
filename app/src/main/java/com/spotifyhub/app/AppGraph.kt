@@ -37,7 +37,7 @@ class AppGraph(private val appContext: Context) {
 
     val moshi: Moshi by lazy {
         Moshi.Builder()
-            .add(KotlinJsonAdapterFactory())
+            .addLast(KotlinJsonAdapterFactory())
             .build()
     }
 
