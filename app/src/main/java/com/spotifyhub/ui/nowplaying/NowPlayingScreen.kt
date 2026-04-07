@@ -149,7 +149,6 @@ fun NowPlayingContent(
         if (renderBackdrop) {
             AlbumBackdropHost(
                 artworkUrl = playback?.item?.artworkUrl,
-                artworkKey = playback?.item?.id,
                 blurPassCount = resolvedBlurPassCount,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -215,7 +214,6 @@ fun NowPlayingScreen(
     ) {
         AlbumBackdropHost(
             artworkUrl = playback?.item?.artworkUrl,
-            artworkKey = playback?.item?.id,
             blurPassCount = blurPassCount,
             modifier = Modifier.fillMaxSize(),
         )

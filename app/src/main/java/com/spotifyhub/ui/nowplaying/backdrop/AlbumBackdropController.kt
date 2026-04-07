@@ -40,7 +40,6 @@ class AlbumBackdropController(
     private val idleSlot = BackdropTextureSlot(
         bitmap = idleBitmap,
         aspectRatio = 1f,
-        seed = BackdropSeedFactory.from("idle"),
         key = "idle",
     )
 
@@ -49,7 +48,6 @@ class AlbumBackdropController(
     private var loadJob: Job? = null
     private var currentSlot: BackdropTextureSlot = idleSlot
     private var currentArtworkUrl: String? = null
-    private var currentArtworkKey: String? = null
     private var isStarted = false
 
     fun bindRenderer(renderer: AlbumBackdropRenderer) {
@@ -72,19 +70,18 @@ class AlbumBackdropController(
         loadJob?.cancel()
     }
 
-    fun setArtwork(artworkUrl: String?, artworkKey: String?) {
-        if (artworkUrl == currentArtworkUrl && artworkKey == currentArtworkKey) {
+    fun setArtwork(artworkUrl: String?) {
+        val normalizedArtworkUrl = artworkUrl?.takeIf(String::isNotBlank)
+        if (normalizedArtworkUrl == currentArtworkUrl) {
             return
         }
 
-        currentArtworkUrl = artworkUrl
-        currentArtworkKey = artworkKey
+        currentArtworkUrl = normalizedArtworkUrl
         loadJob?.cancel()
         val previousSlot = currentSlot
-        val seedKey = artworkKey?.takeIf(String::isNotBlank) ?: artworkUrl ?: "idle"
 
-        if (artworkUrl.isNullOrBlank()) {
-            currentSlot = idleSlot.copy(seed = BackdropSeedFactory.from(seedKey))
+        if (normalizedArtworkUrl == null) {
+            currentSlot = idleSlot
             pushState(previous = previousSlot.takeUnless { it.key == currentSlot.key }, animate = previousSlot.key != currentSlot.key)
             return
         }
@@ -92,7 +89,7 @@ class AlbumBackdropController(
         loadJob = scope.launch {
             var bitmap: Bitmap? = null
             for (attempt in 0 until MAX_LOAD_ATTEMPTS) {
-                bitmap = loadBitmap(artworkUrl)
+                bitmap = loadBitmap(normalizedArtworkUrl)
                 if (bitmap != null || !isActive || attempt == MAX_LOAD_ATTEMPTS - 1) {
                     break
                 }
@@ -101,8 +98,8 @@ class AlbumBackdropController(
 
             val resolvedBitmap = bitmap
             if (resolvedBitmap == null) {
-                if (currentArtworkUrl == artworkUrl && currentArtworkKey == artworkKey && previousSlot.key == idleSlot.key) {
-                    currentSlot = idleSlot.copy(seed = BackdropSeedFactory.from(seedKey))
+                if (currentArtworkUrl == normalizedArtworkUrl && previousSlot.key == idleSlot.key) {
+                    currentSlot = idleSlot
                     pushState(previous = null, animate = false)
                 }
                 return@launch
@@ -111,8 +108,7 @@ class AlbumBackdropController(
             val nextSlot = BackdropTextureSlot(
                 bitmap = resolvedBitmap,
                 aspectRatio = max(resolvedBitmap.width, 1).toFloat() / max(resolvedBitmap.height, 1).toFloat(),
-                seed = BackdropSeedFactory.from(seedKey),
-                key = artworkUrl,
+                key = normalizedArtworkUrl,
             )
             currentSlot = nextSlot
             pushState(previous = previousSlot.takeUnless { it.key == nextSlot.key }, animate = previousSlot.key != nextSlot.key)

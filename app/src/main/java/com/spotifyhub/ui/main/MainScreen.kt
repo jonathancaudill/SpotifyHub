@@ -153,7 +153,6 @@ fun MainScreen(
 
             NowPlayingBackdropLayer(
                 artworkUrl = playerShellState.artworkUrl,
-                artworkKey = playerShellState.artworkKey,
                 blurPassCount = blurPassCount,
                 isVisible = isNowPlayingTab,
             )
@@ -279,13 +278,11 @@ fun MainScreen(
 @Composable
 private fun AppBackdropLayer(
     artworkUrl: String?,
-    artworkKey: String?,
     blurPassCount: Int,
     isVisible: Boolean,
 ) {
     AlbumBackdropHost(
         artworkUrl = artworkUrl,
-        artworkKey = artworkKey,
         blurPassCount = blurPassCount,
         isVisible = isVisible,
         modifier = Modifier.fillMaxSize(),
@@ -295,13 +292,11 @@ private fun AppBackdropLayer(
 @Composable
 private fun NowPlayingBackdropLayer(
     artworkUrl: String?,
-    artworkKey: String?,
     blurPassCount: Int,
     isVisible: Boolean,
 ) {
     AppBackdropLayer(
         artworkUrl = artworkUrl,
-        artworkKey = artworkKey,
         blurPassCount = blurPassCount,
         isVisible = isVisible,
     )

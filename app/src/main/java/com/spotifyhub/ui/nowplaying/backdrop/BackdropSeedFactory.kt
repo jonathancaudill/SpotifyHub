@@ -17,16 +17,21 @@ object BackdropSeedFactory {
         }
 
         return BackdropSeed(
-            x = nextFloat(state),
-            y = nextFloat(state),
-            z = nextFloat(state),
+            x = nextFloat(state).also { state = advanceState(state) },
+            y = nextFloat(state).also { state = advanceState(state) },
+            z = nextFloat(state).also { state = advanceState(state) },
             w = nextFloat(state),
         )
     }
 
-    private fun nextFloat(input: Long): Float {
+    private fun advanceState(input: Long): Long {
         var value = input * 2862933555777941757L + 3037000493L
         value = value xor (value ushr 17)
+        return value
+    }
+
+    private fun nextFloat(input: Long): Float {
+        val value = advanceState(input)
         return ((value ushr 40) and 0xFFFFFFL).toFloat() / 0xFFFFFF.toFloat()
     }
 }

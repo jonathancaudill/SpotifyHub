@@ -16,7 +16,6 @@ import javax.microedition.khronos.opengles.GL10
 internal data class BackdropTextureSlot(
     val bitmap: Bitmap,
     val aspectRatio: Float,
-    val seed: BackdropSeed,
     val key: String,
 )
 
@@ -111,8 +110,9 @@ class AlbumBackdropRenderer(
     private var presentTextureHandle = 0
     private var presentSaturationHandle = 0
 
-    private var currentSeed = BackdropSeedFactory.from("idle")
-    private var previousSeed = currentSeed
+    // Keep one motion field alive for the renderer lifetime so track changes
+    // only swap artwork inside the sprites instead of resetting their pathing.
+    private val sceneSeed = BackdropSeedFactory.from("album-backdrop-scene")
     private var currentAspectRatio = 1f
     private var previousAspectRatio = 1f
     private var transitionStartMs = 0L
@@ -121,7 +121,9 @@ class AlbumBackdropRenderer(
     private var blurPassCount = KAWASE_OFFSETS.size
     private val startTimeMs = SystemClock.elapsedRealtime()
 
-    private val timeWrapPeriod = (2.0 * Math.PI * 400.0 / 3.0).toFloat()
+    // Wrap after every sprite completes an integer number of turns:
+    // 0.05 -> 5 rotations, -0.12 -> 12, -0.09 -> 9, 0.06 -> 6.
+    private val timeWrapPeriod = (2.0 * Math.PI * 100.0).toFloat()
     private var pendingState: BackdropTransitionState? = null
 
     override fun onSurfaceCreated(unused: GL10?, config: EGLConfig?) {
@@ -215,7 +217,7 @@ class AlbumBackdropRenderer(
             outputFramebuffer = framebufferIds[1],
             textureId = sourceTextureIds[0],
             aspectRatio = currentAspectRatio,
-            seed = currentSeed,
+            seed = sceneSeed,
             width = offscreenWidth,
             height = offscreenHeight,
             timeSeconds = timeSeconds,
@@ -227,7 +229,7 @@ class AlbumBackdropRenderer(
                 outputFramebuffer = framebufferIds[0],
                 textureId = sourceTextureIds[1],
                 aspectRatio = previousAspectRatio,
-                seed = previousSeed,
+                seed = sceneSeed,
                 width = offscreenWidth,
                 height = offscreenHeight,
                 timeSeconds = timeSeconds,
@@ -321,12 +323,10 @@ class AlbumBackdropRenderer(
     private fun applyTransitionState(state: BackdropTransitionState) {
         uploadBitmap(sourceTextureIds[0], state.current.bitmap)
         currentAspectRatio = state.current.aspectRatio
-        currentSeed = state.current.seed
 
         val previous = state.previous ?: state.current
         uploadBitmap(sourceTextureIds[1], previous.bitmap)
         previousAspectRatio = previous.aspectRatio
-        previousSeed = previous.seed
 
         shouldAnimateTransition = state.animate && state.previous != null
         transitionStartMs = SystemClock.elapsedRealtime()

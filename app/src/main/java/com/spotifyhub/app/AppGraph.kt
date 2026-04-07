@@ -103,7 +103,7 @@ class AppGraph(private val appContext: Context) {
     val playbackRepository: PlaybackRepository by lazy {
         PlaybackRepository(
             appScope = applicationScope,
-            authRepository = authRepository,
+            sessionState = authRepository.sessionState,
             playerApi = playerApi,
             libraryApi = libraryApi,
         )

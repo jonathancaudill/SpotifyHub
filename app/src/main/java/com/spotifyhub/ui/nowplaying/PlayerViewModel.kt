@@ -17,7 +17,6 @@ data class PlayerUiState(
 
 data class PlayerShellState(
     val artworkUrl: String?,
-    val artworkKey: String?,
     val currentTrackId: String?,
     val isPlaybackActive: Boolean,
 )
@@ -46,7 +45,6 @@ class PlayerViewModel(
         .map { playback ->
             PlayerShellState(
                 artworkUrl = playback?.item?.artworkUrl,
-                artworkKey = playback?.item?.id,
                 currentTrackId = playback?.item?.id,
                 isPlaybackActive = playback?.isPlaying == true,
             )
@@ -57,7 +55,6 @@ class PlayerViewModel(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = PlayerShellState(
                 artworkUrl = null,
-                artworkKey = null,
                 currentTrackId = null,
                 isPlaybackActive = false,
             ),

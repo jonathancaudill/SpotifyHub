@@ -35,7 +35,6 @@ private const val FIXED_BLUR_PASS_COUNT = 7
 @Composable
 fun AlbumBackdropHost(
     artworkUrl: String?,
-    artworkKey: String?,
     blurPassCount: Int = 8,
     isVisible: Boolean = true,
     modifier: Modifier = Modifier,
@@ -115,8 +114,8 @@ fun AlbumBackdropHost(
         },
     )
 
-    LaunchedEffect(artworkUrl, artworkKey) {
-        controller.setArtwork(artworkUrl = artworkUrl, artworkKey = artworkKey)
+    LaunchedEffect(artworkUrl) {
+        controller.setArtwork(artworkUrl = artworkUrl)
     }
 
     LaunchedEffect(isVisible, isStarted) {

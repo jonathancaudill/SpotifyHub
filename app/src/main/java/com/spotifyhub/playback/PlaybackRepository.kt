@@ -1,7 +1,6 @@
 package com.spotifyhub.playback
 
 import com.spotifyhub.auth.SessionState
-import com.spotifyhub.auth.SpotifyAuthRepository
 import com.spotifyhub.playback.model.PlaybackItem
 import com.spotifyhub.playback.model.PlaybackSnapshot
 import com.spotifyhub.playback.model.RepeatMode
@@ -22,7 +21,7 @@ import kotlinx.coroutines.sync.withLock
 
 class PlaybackRepository(
     private val appScope: CoroutineScope,
-    private val authRepository: SpotifyAuthRepository,
+    private val sessionState: StateFlow<SessionState>,
     private val playerApi: SpotifyPlayerApi,
     private val libraryApi: SpotifyLibraryApi,
 ) {
@@ -63,15 +62,20 @@ class PlaybackRepository(
         private const val OPTIMISTIC_GRACE_MS = 5_000L
         private const val PLAY_PAUSE_OPTIMISTIC_GRACE_MS = 1_500L
         private const val POLL_INTERVAL_MS = 1_000L
+        private const val RESTART_CURRENT_TRACK_THRESHOLD_MS = 10_000L
 
         private val DEFAULT_RECONCILE_DELAYS_MS = longArrayOf(0L, 500L, 1_500L)
         private val TOGGLE_PLAYBACK_RECONCILE_DELAYS_MS = longArrayOf(0L, 350L, 1_000L, 2_500L)
         private val TRANSPORT_RECONCILE_DELAYS_MS = longArrayOf(0L, 400L, 1_200L, 2_500L)
+
+        internal fun shouldRestartCurrentTrackOnPrevious(positionMs: Long): Boolean {
+            return positionMs >= RESTART_CURRENT_TRACK_THRESHOLD_MS
+        }
     }
 
     init {
         appScope.launch {
-            authRepository.sessionState.collect { state ->
+            sessionState.collect { state ->
                 when (state) {
                     is SessionState.Ready -> startPolling()
                     else -> stopPolling()
@@ -274,8 +278,14 @@ class PlaybackRepository(
     }
 
     fun skipPrevious() {
+        val playback = _playbackState.value
+        if (playback != null && shouldRestartCurrentTrackOnPrevious(currentPlaybackPosition(playback))) {
+            seekTo(positionMs = 0L)
+            return
+        }
+
         val prev = cachedPreviousItem
-        val currentItem = _playbackState.value?.item
+        val currentItem = playback?.item
         applyOptimistic {
             copy(
                 progressMs = 0L,
