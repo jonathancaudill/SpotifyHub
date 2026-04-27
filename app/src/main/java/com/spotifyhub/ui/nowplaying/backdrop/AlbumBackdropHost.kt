@@ -106,12 +106,9 @@ fun AlbumBackdropHost(
                 }
             }
         },
-        update = { surfaceView ->
-            if (glSurfaceView !== surfaceView) {
-                glSurfaceView = surfaceView
-            }
+        update = { view ->
             updateSurfacePresentation(
-                surfaceView = surfaceView,
+                surfaceView = view,
                 isVisible = isVisible,
             )
         },

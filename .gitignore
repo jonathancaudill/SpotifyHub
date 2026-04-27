@@ -15,3 +15,6 @@ app/build/
 
 # SF Pro fonts — Apple proprietary, do not distribute
 app/src/main/res/font/sf_pro_*.otf
+
+# Android SDK
+/usr/lib/android-sdk/
