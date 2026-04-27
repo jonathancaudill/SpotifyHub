@@ -86,10 +86,11 @@ fun AlbumBackdropHost(
                 }
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
-                addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _, _ ->
+                addOnLayoutChangeListener { v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom ->
+                    val changedView = v as? GLSurfaceView ?: return@addOnLayoutChangeListener
                     updateSurfaceBufferSize(
-                        surfaceView = view as GLSurfaceView,
-                        isVisible = view.visibility == View.VISIBLE,
+                        surfaceView = changedView,
+                        isVisible = changedView.visibility == View.VISIBLE,
                     )
                 }
                 controller.bindRenderer(renderer)
