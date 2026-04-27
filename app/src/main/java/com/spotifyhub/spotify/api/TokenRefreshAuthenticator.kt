@@ -29,5 +29,9 @@ class TokenRefreshAuthenticator(
         }
         return count
     }
+
+    companion object {
+        private const val MAX_AUTHENTICATION_ATTEMPTS = 2
+    }
 }
 

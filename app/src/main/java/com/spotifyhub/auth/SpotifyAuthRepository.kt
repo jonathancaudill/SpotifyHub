@@ -33,7 +33,14 @@ class SpotifyAuthRepository(
         if (stored.expiresAtEpochSeconds <= Instant.now().epochSecond + 300) {
             val refreshed = refreshAccessTokenInternal(stored.refreshToken)
             if (!refreshed) {
-                logout()
+                if (stored.expiresAtEpochSeconds > Instant.now().epochSecond) {
+                    _sessionState.value = SessionState.Ready(
+                        accessToken = stored.accessToken,
+                        expiresAtEpochSeconds = stored.expiresAtEpochSeconds,
+                    )
+                } else {
+                    logout()
+                }
             }
             return
         }
@@ -115,9 +122,16 @@ class SpotifyAuthRepository(
     fun currentAccessToken(): String? = currentToken?.accessToken
 
     fun blockingRefreshAccessToken(): String? = runBlocking {
-        val refreshToken = currentToken?.refreshToken ?: return@runBlocking null
+        val stored = currentToken ?: tokenStore.read() ?: return@runBlocking null
+        val refreshToken = stored.refreshToken
         val success = refreshAccessTokenInternal(refreshToken)
-        currentToken?.accessToken.takeIf { success }
+        if (success) {
+            currentToken?.accessToken
+        } else if (stored.expiresAtEpochSeconds > Instant.now().epochSecond) {
+            stored.accessToken
+        } else {
+            null
+        }
     }
 
     private suspend fun refreshAccessTokenInternal(refreshToken: String): Boolean {

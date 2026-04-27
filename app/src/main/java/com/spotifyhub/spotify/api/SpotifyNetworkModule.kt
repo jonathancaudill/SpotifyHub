@@ -19,7 +19,7 @@ object SpotifyNetworkModule {
     private fun createAuthenticatedClient(authRepository: SpotifyAuthRepository): OkHttpClient {
         return OkHttpClient.Builder()
             .addInterceptor(AuthHeaderInterceptor(authRepository))
-            .addInterceptor(RetryAfterInterceptor())
+            .addInterceptor(RetryAfterInterceptor(authRepository))
             .authenticator(TokenRefreshAuthenticator(authRepository))
             .build()
     }

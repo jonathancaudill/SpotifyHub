@@ -1,16 +1,32 @@
 package com.spotifyhub.spotify.api
 
+import com.spotifyhub.auth.SpotifyAuthRepository
 import java.util.concurrent.TimeUnit
 import okhttp3.Interceptor
 import okhttp3.Response
 
-class RetryAfterInterceptor : Interceptor {
+class RetryAfterInterceptor(
+    private val authRepository: SpotifyAuthRepository? = null,
+) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         var response = chain.proceed(request)
         var attempt = 0
 
         while (attempt < MAX_RETRIES && isRetryableError(response.code)) {
+            if (response.code == 401) {
+                val refreshedToken = authRepository?.blockingRefreshAccessToken()
+                if (refreshedToken != null) {
+                    val newRequest = request.newBuilder()
+                        .header("Authorization", "Bearer $refreshedToken")
+                        .build()
+                    response.close()
+                    attempt++
+                    response = chain.proceed(newRequest)
+                    continue
+                }
+            }
+
             val delayMs = calculateBackoffDelay(attempt)
             response.close()
             attempt++
@@ -22,7 +38,7 @@ class RetryAfterInterceptor : Interceptor {
     }
 
     private fun isRetryableError(code: Int): Boolean {
-        return code == 429 || code == 500 || code == 502 || code == 503 || code == 504
+        return code == 401 || code == 429 || code == 500 || code == 502 || code == 503 || code == 504
     }
 
     private fun calculateBackoffDelay(attempt: Int): Long {
