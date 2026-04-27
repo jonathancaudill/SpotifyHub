@@ -6,15 +6,36 @@ import okhttp3.Response
 
 class RetryAfterInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        val response = chain.proceed(chain.request())
-        if (response.code != 429) {
-            return response
+        val request = chain.request()
+        var response = chain.proceed(request)
+        var attempt = 0
+
+        while (attempt < MAX_RETRIES && isRetryableError(response.code)) {
+            val delayMs = calculateBackoffDelay(attempt)
+            response.close()
+            attempt++
+            TimeUnit.MILLISECONDS.sleep(delayMs)
+            response = chain.proceed(request)
         }
 
-        val retryAfterSeconds = response.header("Retry-After")?.toLongOrNull() ?: return response
-        response.close()
-        TimeUnit.SECONDS.sleep(retryAfterSeconds.coerceAtMost(5))
-        return chain.proceed(chain.request())
+        return response
+    }
+
+    private fun isRetryableError(code: Int): Boolean {
+        return code == 429 || code == 500 || code == 502 || code == 503 || code == 504
+    }
+
+    private fun calculateBackoffDelay(attempt: Int): Long {
+        return when (attempt) {
+            0 -> 500L
+            1 -> 1_000L
+            2 -> 2_000L
+            3 -> 4_000L
+            else -> 5_000L
+        }
+    }
+
+    companion object {
+        private const val MAX_RETRIES = 4
     }
 }
-

@@ -54,6 +54,10 @@ class PlaybackRepository(
     @Volatile
     private var pendingTransportTransition: PendingTransportTransition? = null
 
+    /** Temporary cache to hold next item during optimistic transition until poll confirms. */
+    @Volatile
+    private var optimisticNextItem: PlaybackItem? = null
+
     /** Prevents ad-hoc refreshes from piling on top of the polling loop. */
     private val fetchMutex = Mutex()
 
@@ -110,6 +114,7 @@ class PlaybackRepository(
         cachedNextItem = null
         cachedPreviousItem = null
         pendingTransportTransition = null
+        optimisticNextItem = null
     }
 
     private suspend fun fetchPlayback() {
@@ -135,9 +140,12 @@ class PlaybackRepository(
                             val transition = pendingTransportTransition
                             if (playback?.item?.id == transition?.targetItemId) {
                                 pendingTransportTransition = null
+                                optimisticNextItem = null
                                 optimisticUntil = 0L
                             } else if (!inGracePeriod) {
                                 pendingTransportTransition = null
+                                optimisticNextItem = null
+                                optimisticUntil = 0L
                             }
                         }
                         syncCurrentItemSavedState(playback?.item?.uri)
@@ -198,7 +206,8 @@ class PlaybackRepository(
             return false
         }
 
-        return queuedNextItem?.id == _playbackState.value?.item?.id
+        val expectedNextItem = optimisticNextItem ?: pendingTransportTransition?.targetItemId
+        return queuedNextItem?.id == expectedNextItem
     }
 
     /** Fire the API command in the background, serialized by the mutex. */
@@ -268,7 +277,8 @@ class PlaybackRepository(
         }
         if (next != null) {
             cachedPreviousItem = currentItem
-            cachedNextItem = null // consumed — will be refreshed on next poll
+            optimisticNextItem = next
+            cachedNextItem = null
         }
         pendingTransportTransition = PendingTransportTransition(
             sourceItemId = currentItem?.id,

@@ -12,6 +12,17 @@ jobs:
     name: Build Debug & Release APKs
     runs-on: ubuntu-latest
 
+    # Secrets required (set in GitHub → Settings → Secrets and variables → Actions):
+    #   - SPOTIFY_CLIENT_ID:     Spotify API client ID
+    #   - SPOTIFY_CLIENT_SECRET: Spotify API client secret
+    #   - SHEETS_SCRIPT_URL:      Google Apps Script Web App URL (deploy as "Anyone" access)
+    #
+    # Optional for release builds:
+    #   - RELEASE_STORE_FILE:     Base64-encoded keystore (see release-signing setup below)
+    #   - RELEASE_STORE_PASSWORD: Keystore password
+    #   - RELEASE_KEY_ALIAS:   Key alias
+    #   - RELEASE_KEY_PASSWORD: Key password
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,6 +38,15 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+
+      # Decode release keystore if present (for release builds on main branch)
+      - name: Decode signing key
+        if: env.RELEASE_STORE_FILE_BASE64 != ''
+        env:
+          RELEASE_STORE_FILE_BASE64: ${{ secrets.RELEASE_STORE_FILE_BASE64 }}
+        run: |
+          echo "$RELEASE_STORE_FILE_BASE64" | base64 -d > app/release.keystore
+          echo "Decoded release keystore."
 
       # SF Pro fonts are Apple-proprietary and gitignored (59 MB).
       # They live as a zip release asset on a separate private repo:
@@ -76,11 +96,23 @@ jobs:
           ls -la "$FONT_DIR"
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug -PSPOTIFY_CLIENT_ID="${{ secrets.SPOTIFY_CLIENT_ID }}"
+        run: |
+          ./gradlew assembleDebug \
+            -PSPOTIFY_CLIENT_ID="${{ secrets.SPOTIFY_CLIENT_ID }}" \
+            -PSPOTIFY_CLIENT_SECRET="${{ secrets.SPOTIFY_CLIENT_SECRET }}" \
+            -PSHEETS_SCRIPT_URL="${{ secrets.SHEETS_SCRIPT_URL }}"
 
       - name: Build release APK
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: ./gradlew assembleRelease -PSPOTIFY_CLIENT_ID="${{ secrets.SPOTIFY_CLIENT_ID }}"
+        run: |
+          ./gradlew assembleRelease \
+            -PSPOTIFY_CLIENT_ID="${{ secrets.SPOTIFY_CLIENT_ID }}" \
+            -PSPOTIFY_CLIENT_SECRET="${{ secrets.SPOTIFY_CLIENT_SECRET }}" \
+            -PSHEETS_SCRIPT_URL="${{ secrets.SHEETS_SCRIPT_URL }}" \
+            -PRELEASE_STORE_FILE=app/release.keystore \
+            -PRELEASE_STORE_PASSWORD="${{ secrets.RELEASE_STORE_PASSWORD }}" \
+            -PRELEASE_KEY_ALIAS="${{ secrets.RELEASE_KEY_ALIAS }}" \
+            -PRELEASE_KEY_PASSWORD="${{ secrets.RELEASE_KEY_PASSWORD }}"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

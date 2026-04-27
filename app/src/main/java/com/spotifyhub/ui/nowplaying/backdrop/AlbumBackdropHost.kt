@@ -86,7 +86,7 @@ fun AlbumBackdropHost(
                 }
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
-                addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+                addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _, _ ->
                     updateSurfaceBufferSize(
                         surfaceView = view as GLSurfaceView,
                         isVisible = view.visibility == View.VISIBLE,
@@ -100,6 +100,9 @@ fun AlbumBackdropHost(
                         surfaceView = this,
                         isVisible = isVisible,
                     )
+                }
+                queueEvent {
+                    renderer.resetTime()
                 }
             }
         },
@@ -141,7 +144,7 @@ fun AlbumBackdropHost(
 
             val callback = object : Choreographer.FrameCallback {
                 override fun doFrame(frameTimeNanos: Long) {
-                    if (
+                    if (isStarted &&
                         surfaceView.hasWindowFocus() &&
                         surfaceView.windowVisibility == View.VISIBLE &&
                         surfaceView.isShown &&
@@ -170,6 +173,9 @@ fun AlbumBackdropHost(
                     isStarted = true
                     controller.onStart()
                     glSurfaceView?.onResume()
+                    glSurfaceView?.queueEvent {
+                        renderer.resetTime()
+                    }
                 }
 
                 Lifecycle.Event.ON_STOP -> {

@@ -40,8 +40,6 @@ class AlbumBackdropRenderer(
         val SPRITE_SIZE_FACTORS = floatArrayOf(1.25f, 0.80f, 0.50f, 0.25f)
         val SPRITE_ROTATION_SPEEDS = floatArrayOf(0.05f, -0.12f, -0.09f, 0.06f)
 
-        // Keep the backdrop field full-resolution so the art retains structure
-        // under the downstream blur and saturation passes.
         val KAWASE_OFFSETS = floatArrayOf(6f, 10f, 16f, 24f, 34f, 46f, 60f, 78f)
     }
 
@@ -110,8 +108,6 @@ class AlbumBackdropRenderer(
     private var presentTextureHandle = 0
     private var presentSaturationHandle = 0
 
-    // Keep one motion field alive for the renderer lifetime so track changes
-    // only swap artwork inside the sprites instead of resetting their pathing.
     private val sceneSeed = BackdropSeedFactory.from("album-backdrop-scene")
     private var currentAspectRatio = 1f
     private var previousAspectRatio = 1f
@@ -119,10 +115,9 @@ class AlbumBackdropRenderer(
     private var shouldAnimateTransition = false
     @Volatile
     private var blurPassCount = KAWASE_OFFSETS.size
-    private val startTimeMs = SystemClock.elapsedRealtime()
+    @Volatile
+    private var startTimeMs = SystemClock.elapsedRealtime()
 
-    // Wrap after every sprite completes an integer number of turns:
-    // 0.05 -> 5 rotations, -0.12 -> 12, -0.09 -> 9, 0.06 -> 6.
     private val timeWrapPeriod = (2.0 * Math.PI * 100.0).toFloat()
     private var pendingState: BackdropTransitionState? = null
 
@@ -318,6 +313,10 @@ class AlbumBackdropRenderer(
         }
 
         surfaceReady = false
+    }
+
+    internal fun resetTime() {
+        startTimeMs = SystemClock.elapsedRealtime()
     }
 
     private fun applyTransitionState(state: BackdropTransitionState) {
